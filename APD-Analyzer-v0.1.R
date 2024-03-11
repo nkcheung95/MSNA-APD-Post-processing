@@ -5,7 +5,7 @@
 packages <- c(
   "dbscan", "cluster", "ggsci", "grid", "gridExtra", 
   "purrr", "readxl", "tidyverse", "ggpubr", "rstatix",
-  "stringr", "magick", "fs", "patchwork", "factoextra","reshape","reshape2"
+  "stringr", "magick", "fs", "patchwork", "factoextra","reshape2"
 )
 
 # Function to install and load packages
