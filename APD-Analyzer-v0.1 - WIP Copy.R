@@ -188,7 +188,7 @@ ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
 ###Firing probability
 beats_total <- nrow(sheet6)
 burst_total <- max(sheet2$`Burst Number`)
-total_time <- as.numeric(round(sum(sheet6$`RRI (s)`)))
+total_time <- as.numeric(round(sum(sheet6$`RRI (s)`))+1)
 #cluster cleaner
 cluster_prob_list <- list() 
 beats_prob_list <- list()
@@ -228,15 +228,7 @@ for (i in seq_along(split_clusters)) {
     guides(fill = "none")+
     theme_classic()
   
-  timeline_list[[i]] <- ggplot(cluster, aes(ap_loc_sec,'Cluster Number'))+
-    geom_vline(xintercept = cluster$ap_loc_sec)+
-    xlim(0,total_time)+
-    guides(fill = "none")+
-    theme_classic()+
-    theme(axis.ticks = element_blank(),axis.text = element_blank(),
-          panel.border = element_rect(color = "black", fill = NA),axis.title.y=element_text(angle=0))+
-    ylab(levels(cluster$`Cluster Number`)[i])+
-    xlab("")
+
   
 }
 
@@ -350,9 +342,6 @@ grid <- grid.arrange(grobs = combined_grobs_list,ncol=1)
 cluster_summary <- arrangeGrob(grid, top = file.id)
 gridheight <- (length(combined_grobs_list)*2)
 ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15)
-timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
-timelength <- length(combined_grobs_list)/2
-ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=15)
 
 all_lat_amp <- sheet3[c(4,8,9)]
 all_lat_amp <- drop_na(all_lat_amp)
@@ -388,7 +377,24 @@ for (i in seq_along(dbscan_split_clusters_list)) {
   dbscan_split_clusters_list[[i]][dbscan_split_clusters_list[[i]]$neuron_id == "0", "neuron_id"] <- "1"
   # If you need 'neuron_id' to be a factor again, you can convert it back
 dbscan_split_clusters_list[[i]]$neuron_id <- as.factor(dbscan_split_clusters_list[[i]]$neuron_id)
+#Cluster Timeline
+dbcluster <- dbscan_split_clusters_list[[i]]
+dbcluster <- rename(dbcluster,"ap_loc_sec"="AP Location from the begining of the Section (s)")
+timeline_list[[i]] <- ggplot(dbcluster, aes(ap_loc_sec,'Cluster Number',color=neuron_id))+
+  geom_vline(xintercept = dbcluster$ap_loc_sec,color=dbcluster$neuron_id,linewidth=0.5)+
+  xlim(0,total_time)+
+  guides(fill = "none")+
+  scale_color_jco()+
+  theme_classic()+
+  theme(axis.ticks = element_blank(),axis.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA))+
+  ylab(levels(cluster$`Cluster Number`)[i])+
+  xlab("")
+
 }
+timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
+timelength <- length(combined_grobs_list)
+ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
 
 # Combine all data frames into one
 neurons_df <- do.call(rbind, dbscan_split_clusters_list)
