@@ -4,8 +4,9 @@
 # Define the packages you want to use
 packages <- c(
   "dbscan", "cluster", "ggsci", "grid", "gridExtra", 
-  "purrr", "readxl", "tidyverse", "ggpubr", "rstatix",
-  "stringr", "magick", "fs", "patchwork", "factoextra","reshape2"
+  "purrr", "readxl", "ggpubr", "rstatix",
+  "stringr", "magick", "fs", "patchwork", "factoextra",
+  "reshape","reshape2", "tidyverse","forcats","FNN"
 )
 
 # Function to install and load packages
@@ -107,13 +108,7 @@ remove_outliers <- function(df, col_name) {
 
 
 ##CLUSTER AP VISUAL PLOT
-sheet4 <- rename(sheet4,"1"="Actual AP Data ==>","2"="...4","3"="...5","4"="...6",
-                    "5"="...7","6"="...8","7"="...9","8"="...10","9"="...11","10"="...12",
-                    "11"="...13","12"="...14","13"="...15","14"="...16","15"="...17",
-                    "16"="...18","17"="...19","18"="...20","19"="...21","20"="...22",
-                    "21"="...23","22"="...24","23"="...25","24"="...26","25"="...27",
-                    "26"="...28","27"="...29","28"="...30","29"="...31","30"="...32",
-                    "31"="...33","32"="...34")
+colnames(sheet4) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
 clusterfigdata <- sheet4[-c(1,2)]
 clusterfigdata <- t(clusterfigdata)
 aptime <- (1:nrow(clusterfigdata))
@@ -194,12 +189,16 @@ ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
 ###Firing probability
 beats_total <- nrow(sheet6)
 burst_total <- max(sheet2$`Burst Number`)
+total_time <- as.numeric(max(sheet1$`Data Duration (s)`))
 #cluster cleaner
 cluster_prob_list <- list() 
 beats_prob_list <- list()
+timeline_list <- list()
+
 for (i in seq_along(split_clusters)) {
   cluster <- as.data.frame(split_clusters[[i]])
   cluster <- cluster[-c(12:44)]
+  cluster <- rename(cluster,"ap_loc_sec"="AP Location from the begining of the Section (s)")
   unique_bursts <- length(unique(cluster$`Burst Number`))
   beats_prob <- unique_bursts/beats_total*100
   offbeats_prob <- (beats_total-unique_bursts)/beats_total*100
@@ -229,6 +228,9 @@ for (i in seq_along(split_clusters)) {
     scale_fill_jco()+
     guides(fill = "none")+
     theme_classic()
+  
+
+  
 }
 
 cluster_prob <- grid.arrange(grobs = cluster_prob_list, ncol = 4)
@@ -292,8 +294,8 @@ for (i in seq_along(split_clusters)) {
   scaled_data_list[[i]] <- scaled_data
   
   # Perform DBSCAN clustering
-  eps <- 0.5  # Adjust the epsilon parameter as needed
-  minPts <- 3 # Adjust the minPts parameter as needed
+  eps <- 0.7  # Adjust the epsilon parameter as needed
+  minPts <- 4 # Adjust the minPts parameter as needed
   dbscan_result <- dbscan(scaled_data_list[[i]], eps = eps, minPts = minPts)
   
   # Extract cluster assignments
@@ -342,7 +344,6 @@ cluster_summary <- arrangeGrob(grid, top = file.id)
 gridheight <- (length(combined_grobs_list)*2)
 ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15)
 
-
 all_lat_amp <- sheet3[c(4,8,9)]
 all_lat_amp <- drop_na(all_lat_amp)
 colnames(all_lat_amp) <- c("ap_amp","ap_latency","Cluster")
@@ -377,7 +378,28 @@ for (i in seq_along(dbscan_split_clusters_list)) {
   dbscan_split_clusters_list[[i]][dbscan_split_clusters_list[[i]]$neuron_id == "0", "neuron_id"] <- "1"
   # If you need 'neuron_id' to be a factor again, you can convert it back
 dbscan_split_clusters_list[[i]]$neuron_id <- as.factor(dbscan_split_clusters_list[[i]]$neuron_id)
+#Cluster Timeline
+dbcluster <- dbscan_split_clusters_list[[i]]
+dbcluster <- rename(dbcluster,"ap_loc_sec"="AP Location from the begining of the Section (s)")
+timeline_list[[i]] <- ggplot(dbcluster, aes(ap_loc_sec,'Cluster Number',color=neuron_id))+
+  geom_vline(xintercept = dbcluster$ap_loc_sec,color=dbcluster$neuron_id,linewidth=0.5)+
+  xlim(0,total_time)+
+  guides(fill = "none")+
+  scale_color_jco()+
+  theme_classic()+
+  theme(axis.ticks = element_blank(),axis.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA))+
+  ylab(levels(cluster$`Cluster Number`)[i])+
+  xlab("")
+
 }
+timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
+timelength <- length(combined_grobs_list)
+ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
+#Amplitude sorted cluster plot
+
+
+
 
 # Combine all data frames into one
 neurons_df <- do.call(rbind, dbscan_split_clusters_list)
@@ -390,14 +412,26 @@ burst_rri <- burst_rri %>% filter(`Burst numbers`!= 0)
 burst_rri <- rename(burst_rri,"Burst Number"="Burst numbers")
 rri_neuron_df <- merge(neurons_df,burst_rri)
 rri_neuron_df <- rename(rri_neuron_df,"ap_loc_sec"="AP Location from the begining of the Section (s)")
-###Cluster Timeline Plot
-rri_neuron_df$'Cluster Number' <- factor(rri_neuron_df$'Cluster Number')
-time_cluster_plot <- ggplot(data = rri_neuron_df, aes(x = ap_loc_sec, y = 'Cluster_Number')) +
-  geom_point() +
-  scale_y_discrete(labels = function(x) paste("Cluster", x)) +  # Adjust the y-axis labels
-  labs(y = "Cluster Number") +  # Label the y-axis
-  theme_minimal()  # Adjust theme as desired
-time_cluster_plot
+burstsort_df <- rri_neuron_df[-c(12:43)]
+sort_amp <- sheet2
+sort_amp$sort <- order(sort_amp$`Burst Amp`)
+burstsort_df <- merge(burstsort_df,sort_amp)
+
+#Factor the clusters
+burstsort_df <- burstsort_df %>%
+  arrange(burstsort_df$'Cluster Number')
+burstsort_df$`Cluster Number` <- as.factor(burstsort_df$`Cluster Number`)
+# Get unique values from the cluster column
+sort_cluster_values <- unique(burstsort_df$`Cluster Number`)
+
+# Create a list to store the new dataframes
+sort_split_clusters <- list()
+
+# Loop through unique values and create a dataframe for each value
+for (value in sort_cluster_values) {
+  subset_df <- burstsort_df[burstsort_df$`Cluster Number` == value, ]
+  sort_split_clusters[[value]] <- subset_df
+}
 
 
 ###SAVE R FILE FOR FUTURE USE

@@ -30,6 +30,7 @@ if (nzchar(png_file)) {
   png_data <- readPNG(png_file)
   assign("png_data", png_data, envir = .GlobalEnv)
 }
+
 cluster_timeline <- rasterGrob(png_data, interpolate=T)
 df <- read.delim(txt_file,sep="\t")
 colnames(df)<-c("time","resp_belt","ECG","REBAP","MSNA_raw","MSNA_int")
