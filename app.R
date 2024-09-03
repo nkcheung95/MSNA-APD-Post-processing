@@ -25,12 +25,12 @@ observeEvent(input$dbscan_btn, {
     
   observeEvent(input$isi_btn, {
     # Redirect to ISI Cluster Analysis script hosted on GitHub
-    browseURL("https://github.com/yourusername/yourrepo/blob/main/isi_script.R")
+    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
   })
   
   observeEvent(input$arrhythmia_btn, {
     # Redirect to Arrhythmia Analysis script hosted on GitHub
-    browseURL("https://github.com/yourusername/yourrepo/blob/main/arrhythmia_script.R")
+    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
   })
 }
 
