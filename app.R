@@ -19,7 +19,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$dbscan_btn, {
     # Redirect to DBSCAN Analysis script hosted on GitHub
-    browseURL("https://github.com/yourusername/yourrepo/blob/main/dbscan_script.R")
+    browseURL("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R")
   })
   
   observeEvent(input$isi_btn, {
