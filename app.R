@@ -1,5 +1,3 @@
-library(shiny)
-
 # Define UI
 ui <- fluidPage(
   titlePanel("Analysis Launcher"),
@@ -11,25 +9,42 @@ ui <- fluidPage(
            actionButton("isi_btn", "Run ISI Cluster Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("arrhythmia_btn", "Run Arrhythmia Analysis", width = '300px', style = "font-size: 20px; margin: 20px;")
     )
-  )
+  ),
+  
+  # Add spinner to the UI
+  uiOutput("spinner")
 )
 
 # Define server logic
 server <- function(input, output, session) {
   
-observeEvent(input$dbscan_btn, {
-    # Redirect to DBSCAN Analysis script hosted on GitHub
-    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
-    
+  output$spinner <- renderUI({
+    if (input$dbscan_btn > 0 || input$isi_btn > 0 || input$arrhythmia_btn > 0) {
+      withSpinner(textOutput("loading_text"), type = 6)
+    }
   })
-    
+  
+  observeEvent(input$dbscan_btn, {
+    output$loading_text <- renderText({ "Running DBSCAN Analysis..." })
+    # Simulate a script run with a delay
+    Sys.sleep(5)
+    # Redirect to DBSCAN Analysis script
+    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
+  })
+  
   observeEvent(input$isi_btn, {
-    # Redirect to ISI Cluster Analysis script hosted on GitHub
+    output$loading_text <- renderText({ "Running ISI Cluster Analysis..." })
+    # Simulate a script run with a delay
+    Sys.sleep(5)
+    # Redirect to ISI Cluster Analysis script
     source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
   })
   
   observeEvent(input$arrhythmia_btn, {
-    # Redirect to Arrhythmia Analysis script hosted on GitHub
+    output$loading_text <- renderText({ "Running Arrhythmia Analysis..." })
+    # Simulate a script run with a delay
+    Sys.sleep(5)
+    # Redirect to Arrhythmia Analysis script
     source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
   })
 }
