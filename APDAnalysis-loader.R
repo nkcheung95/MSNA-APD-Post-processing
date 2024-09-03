@@ -1,5 +1,5 @@
 packages <- c(
-  "shiny"
+  "shiny","shinycssloaders"
 )
 
 # Function to install and load packages
