@@ -1,6 +1,7 @@
 library(shiny)
 library(shinycssloaders)
 library(later)
+library(tcltk)
 
 # Define UI
 ui <- fluidPage(
@@ -9,6 +10,7 @@ ui <- fluidPage(
   # Centered button layout
   fluidRow(
     column(12, align = "center",
+           actionButton("setwd_btn", "Set Working Directory", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("dbscan_btn", "Run DBSCAN Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("isi_btn", "Run ISI Cluster Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("arrhythmia_btn", "Run Arrhythmia Analysis", width = '300px', style = "font-size: 20px; margin: 20px;")
@@ -47,6 +49,41 @@ server <- function(input, output, session) {
         h3(status(), style = "color: green;")
       )
     }
+  })
+  
+  observeEvent(input$setwd_btn, {
+    busy(TRUE)
+    status(NULL)
+    output$loading_text <- renderText({ "Selecting Directory and Checking Permissions..." })
+    
+    # Open directory selection dialog
+    dir_path <- tk_choose.dir()
+    
+    if (is.null(dir_path) || dir_path == "") {
+      status("No directory selected.")
+      busy(FALSE)
+      return()
+    }
+    
+    # Create directory if it doesn't exist
+    if (!dir.exists(dir_path)) {
+      dir.create(dir_path, recursive = TRUE)
+    }
+    
+    # Try to set the working directory
+    tryCatch({
+      setwd(dir_path)
+      can_write <- file.access(dir_path, 2) == 0
+      if (can_write) {
+        status(paste("Working directory set to:", dir_path, "and permissions are OK."))
+      } else {
+        status(paste("Working directory set to:", dir_path, "but permissions are not sufficient."))
+      }
+    }, error = function(e) {
+      status(paste("Error:", e$message))
+    })
+    
+    busy(FALSE)
   })
   
   observeEvent(input$dbscan_btn, {
