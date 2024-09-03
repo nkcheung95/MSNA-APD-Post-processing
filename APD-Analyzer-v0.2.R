@@ -82,30 +82,6 @@ sheet4<-read_xls(file.path(getwd(),raw_file),sheet=4)
 sheet5<-read_xls(file.path(getwd(),raw_file),sheet=5)
 sheet6<-read_xls(file.path(getwd(),raw_file),sheet=6)
 
-#FILTER USING LATENCY
-
-
-# Define a function to remove outliers based on 1.5 IQR for a specific column
-remove_outliers <- function(df, col_name) {
-  # Calculate the first quartile (Q1)
-  q1 <- quantile(df[[col_name]], probs = 0.25)
-  
-  # Calculate the third quartile (Q3)
-  q3 <- quantile(df[[col_name]], probs = 0.75)
-  
-  # Calculate the Interquartile Range (IQR)
-  iqr <- q3 - q1
-  
-  # Calculate the upper and lower bounds for outliers
-  upper_bound <- q3 + 1.5 * iqr
-  lower_bound <- q1 - 1.5 * iqr
-  
-  # Filter out values outside the 1.5 IQR range for the specified column
-  df <- df[df[[col_name]] >= lower_bound & df[[col_name]] <= upper_bound, ]
-  
-  return(df)
-}
-
 
 ##CLUSTER AP VISUAL PLOT
 colnames(sheet4) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
@@ -144,11 +120,7 @@ for (value in cluster_values) {
   split_clusters[[value]] <- subset_df
 }
 
-# Iterate through the list of data frames
-for (i in seq_along(split_clusters)) {
-  # Remove outliers from the 'AP Latency (s)' column in the i-th data frame
-  split_clusters[[i]] <- remove_outliers(split_clusters[[i]], 'AP Latency (s)')
-}
+
 ###AP PLOT PER CLUSTER
 clusterplotlist <- list()
 for (i in seq_along(split_clusters)) {
@@ -396,6 +368,15 @@ timeline_list[[i]] <- ggplot(dbcluster, aes(ap_loc_sec,'Cluster Number',color=ne
 timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
 timelength <- length(combined_grobs_list)
 ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
+
+#####AP DBSCAN mean_latency summary
+df_mean_ap_latency <- do.call(rbind, dbscan_split_clusters_list)
+mean_ap_latency <- df_mean_ap_latency %>%
+  group_by(`Burst Number`,`Cluster Number`, neuron_id) %>%  # Group by Cluster Number and neuron_id
+  summarise(mean_ap_latency = mean(ap_latency, na.rm = TRUE),sd_ap_latency= sd(ap_latency, na.rm=T))  # Calculate the mean ap_latency
+write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latency_summary.csv")))
+
+
 #Amplitude sorted cluster plot
 
 
