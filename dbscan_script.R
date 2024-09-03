@@ -107,12 +107,6 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     subset_df <- all_ap[all_ap$`Cluster Number` == value, ]
     split_clusters[[value]] <- subset_df
   }
-  
-  # Iterate through the list of data frames
-  for (i in seq_along(split_clusters)) {
-    # Remove outliers from the 'AP Latency (s)' column in the i-th data frame
-    split_clusters[[i]] <- remove_outliers(split_clusters[[i]], 'AP Latency (s)')
-  }
   ###AP PLOT PER CLUSTER
   clusterplotlist <- list()
   for (i in seq_along(split_clusters)) {
