@@ -26,8 +26,6 @@ install_load_packages <- function(packages) {
 # Call the function to install and load packages
 install_load_packages(packages)
 
-
-
 # Function to select multiple files using tcltk
 select_files <- function() {
   tk_choose.files(multi = TRUE, filters = matrix(c("Excel Files", "*.xls"), ncol = 2))
@@ -44,17 +42,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     file.id <- sub("raw_data/", "", file.id)
     
     # Create a folder with the file.id name inside the analyzed folder
-    analyzed_folder <- "analyzed_data"
-    
-    if (file.exists(analyzed_folder)) {
-      
-      cat("The folder already exists")
-      
-    } else {
-      
-      dir.create(analyzed_folder)
-      
-    }
+
     file_id_folder <- file.path("analyzed_folder", file.id)
     dir.create(file_id_folder, recursive = TRUE)
     
