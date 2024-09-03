@@ -20,7 +20,7 @@ install_load_packages <- function(packages) {
 install_load_packages(packages)
 # Define the GitHub username and repository name
 github_username <- "nkcheung95"
-repo_name <- "EZ-Scatter"
+repo_name <- "MSNA-APD-Post-Processing"
 
 # Run the Shiny app from GitHub
 runGitHub(repo = repo_name, username = github_username)
