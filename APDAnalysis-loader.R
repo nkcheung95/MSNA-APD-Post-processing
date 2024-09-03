@@ -1,5 +1,8 @@
 packages <- c(
-  "shiny","shinycssloaders"
+  "shiny","shinycssloaders","dbscan", "cluster", "ggsci", "grid", "gridExtra", 
+  "purrr", "readxl", "ggpubr", "rstatix",
+  "stringr", "magick", "fs", "patchwork", "factoextra",
+  "reshape","reshape2", "tidyverse","forcats","FNN","tcltk"
 )
 
 # Function to install and load packages
