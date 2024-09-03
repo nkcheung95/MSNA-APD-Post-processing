@@ -1,6 +1,6 @@
 # Define UI
 ui <- fluidPage(
-  titlePanel("Analysis Launcher"),
+  titlePanel("APD Analysis Launcher"),
   
   # Centered button layout
   fluidRow(
