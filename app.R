@@ -11,8 +11,12 @@ ui <- fluidPage(
     )
   ),
   
-  # Add spinner to the UI
-  uiOutput("spinner")
+  # Spinner below buttons
+  fluidRow(
+    column(12, align = "center",
+      uiOutput("spinner")
+    )
+  )
 )
 
 # Define server logic
