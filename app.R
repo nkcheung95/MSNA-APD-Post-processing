@@ -1,6 +1,9 @@
+library(shiny)
+library(shinycssloaders)
+
 # Define UI
 ui <- fluidPage(
-  titlePanel("Analysis Launcher"),
+  titlePanel("APD Analysis Launcher"),
   
   # Centered button layout
   fluidRow(
@@ -11,41 +14,60 @@ ui <- fluidPage(
     )
   ),
   
-  # Add spinner to the UI
-  uiOutput("spinner")
+  # Spinner below buttons
+  fluidRow(
+    column(12, align = "center",
+           uiOutput("spinner")
+    )
+  )
 )
 
 # Define server logic
 server <- function(input, output, session) {
   
+  # Reactive value to control spinner visibility
+  busy <- reactiveVal(FALSE)
+  
+  # Update spinner UI based on button presses
   output$spinner <- renderUI({
-    if (input$dbscan_btn > 0 || input$isi_btn > 0 || input$arrhythmia_btn > 0) {
-      withSpinner(textOutput("loading_text"), type = 6)
+    if (busy()) {
+      tagList(
+        withSpinner(textOutput("loading_text"), type = 6)
+      )
     }
   })
   
   observeEvent(input$dbscan_btn, {
+    busy(TRUE)
     output$loading_text <- renderText({ "Running DBSCAN Analysis..." })
     # Simulate a script run with a delay
-    Sys.sleep(5)
-    # Redirect to DBSCAN Analysis script
-    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
+    later::later(function() {
+      # Redirect to DBSCAN Analysis script
+      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
+      busy(FALSE)
+    }, delay = 2)  # Adjust delay as needed
   })
   
   observeEvent(input$isi_btn, {
+    busy(TRUE)
     output$loading_text <- renderText({ "Running ISI Cluster Analysis..." })
     # Simulate a script run with a delay
-    Sys.sleep(5)
-    # Redirect to ISI Cluster Analysis script
-    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
+    later::later(function() {
+      # Redirect to ISI Cluster Analysis script
+      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
+      busy(FALSE)
+    }, delay = 2)  # Adjust delay as needed
   })
   
   observeEvent(input$arrhythmia_btn, {
+    busy(TRUE)
     output$loading_text <- renderText({ "Running Arrhythmia Analysis..." })
     # Simulate a script run with a delay
-    Sys.sleep(5)
-    # Redirect to Arrhythmia Analysis script
-    source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
+    later::later(function() {
+      # Redirect to Arrhythmia Analysis script
+      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
+      busy(FALSE)
+    }, delay = 2)  # Adjust delay as needed
   })
 }
 
