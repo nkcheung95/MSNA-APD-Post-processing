@@ -57,39 +57,34 @@ server <- function(input, output, session) {
     output$loading_text <- renderText({ "Selecting Directory and Checking Permissions..." })
 
     # Open directory selection dialog
-    tt <- tktoplevel()  # Create a temporary Tk window
-    tkwm.title(tt, "Select Directory")  # Set a title (optional)
-    tkraise(tt)  # Raise the Tk window to the front
-    tcl("wm", "attributes", tt, "-topmost", TRUE)  # Ensure it stays on top
-    dir_path <- tk_choose.dir(parent = tt)  # Open the directory chooser with the Tk window as the parent
-    tkdestroy(tt)  # Destroy the temporary window
+    dir_path <- tk_choose.dir()
 
     if (is.null(dir_path) || dir_path == "") {
-        status("No directory selected.")
-        busy(FALSE)
-        return()
+      status("No directory selected.")
+      busy(FALSE)
+      return()
     }
 
     # Create directory if it doesn't exist
     if (!dir.exists(dir_path)) {
-        dir.create(dir_path, recursive = TRUE)
+      dir.create(dir_path, recursive = TRUE)
     }
 
     # Try to set the working directory
     tryCatch({
-        setwd(dir_path)
-        can_write <- file.access(dir_path, 2) == 0
-        if (can_write) {
-            status(paste("Working directory set to:", dir_path, "and permissions are OK."))
-        } else {
-            status(paste("Working directory set to:", dir_path, "but permissions are not sufficient."))
-        }
+      setwd(dir_path)
+      can_write <- file.access(dir_path, 2) == 0
+      if (can_write) {
+        status(paste("Working directory set to:", dir_path, "and permissions are OK."))
+      } else {
+        status(paste("Working directory set to:", dir_path, "but permissions are not sufficient."))
+      }
     }, error = function(e) {
-        status(paste("Error:", e$message))
+      status(paste("Error:", e$message))
     })
 
     busy(FALSE)
-})
+  })
 
   
   observeEvent(input$dbscan_btn, {
