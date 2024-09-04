@@ -60,7 +60,7 @@ server <- function(input, output, session) {
     tt <- tktoplevel()  # Create a temporary Tk window
     tkwm.title(tt, "Select Directory")  # Set a title (optional)
     tkraise(tt)  # Raise the Tk window to the front
-    tkwm.attributes(tt, topmost = TRUE)  # Ensure it stays on top
+    tcl("wm", "attributes", tt, "-topmost", TRUE)  # Ensure it stays on top
     dir_path <- tk_choose.dir(parent = tt)  # Open the directory chooser with the Tk window as the parent
     tkdestroy(tt)  # Destroy the temporary window
 
