@@ -2,7 +2,6 @@ library(shiny)
 library(shinycssloaders)
 library(later)
 library(tcltk)
-library(markdown)
 
 # Define UI
 ui <- fluidPage(
@@ -24,9 +23,9 @@ ui <- fluidPage(
            uiOutput("spinner"),
            uiOutput("status_message")
     )
-  ),
-  
-  
+  )
+)
+
 # Define server logic
 server <- function(input, output, session) {
   
