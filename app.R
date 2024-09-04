@@ -26,21 +26,7 @@ ui <- fluidPage(
     )
   ),
   
-  # Markdown input box for README
-  fluidRow(
-    column(12, align = "center",
-           textAreaInput("readme_input", "Create README", rows = 8, placeholder = "Enter your README in Markdown format...")
-    )
-  ),
   
-  # Rendered Markdown README below the input box
-  fluidRow(
-    column(12, align = "center",
-           uiOutput("rendered_readme")
-    )
-  )
-)
-
 # Define server logic
 server <- function(input, output, session) {
   
@@ -165,16 +151,6 @@ server <- function(input, output, session) {
       })
       busy(FALSE)
     }, delay = 2)  # Adjust delay as needed
-  })
-  
-  # Render the README in Markdown format
-  output$rendered_readme <- renderUI({
-    req(input$readme_input)
-    tagList(
-      hr(),
-      h3("README"),
-      markdown(input$readme_input)
-    )
   })
 }
 
