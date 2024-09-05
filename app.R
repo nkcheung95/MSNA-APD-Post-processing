@@ -55,21 +55,33 @@ server <- function(input, output, session) {
     busy(TRUE)
     status(NULL)
     output$loading_text <- renderText({ "Selecting Directory and Checking Permissions..." })
-    
+
     # Open directory selection dialog
-    dir_path <- tk_choose.dir()
-    
+    dir_path <- tryCatch({
+      tk_choose.dir()
+    }, error = function(e) {
+      status(paste("Error selecting directory:", e$message))
+      busy(FALSE)
+      return(NULL)
+    })
+
     if (is.null(dir_path) || dir_path == "") {
       status("No directory selected.")
       busy(FALSE)
       return()
     }
-    
+
     # Create directory if it doesn't exist
     if (!dir.exists(dir_path)) {
-      dir.create(dir_path, recursive = TRUE)
+      tryCatch({
+        dir.create(dir_path, recursive = TRUE)
+      }, error = function(e) {
+        status(paste("Error creating directory:", e$message))
+        busy(FALSE)
+        return()
+      })
     }
-    
+
     # Try to set the working directory
     tryCatch({
       setwd(dir_path)
@@ -80,9 +92,9 @@ server <- function(input, output, session) {
         status(paste("Working directory set to:", dir_path, "but permissions are not sufficient."))
       }
     }, error = function(e) {
-      status(paste("Error:", e$message))
+      status(paste("Error setting working directory:", e$message))
     })
-    
+
     busy(FALSE)
   })
   
@@ -93,10 +105,14 @@ server <- function(input, output, session) {
     
     # Simulate a script run with a delay
     later::later(function() {
-      # Source the DBSCAN Analysis script
-      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
+      # Try to source the DBSCAN Analysis script
+      tryCatch({
+        source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R?raw=TRUE")
+        status("DBSCAN Analysis Completed!")
+      }, error = function(e) {
+        status(paste("Error during DBSCAN Analysis:", e$message))
+      })
       busy(FALSE)
-      status("DBSCAN Analysis Completed!")
     }, delay = 2)  # Adjust delay as needed
   })
   
@@ -107,10 +123,14 @@ server <- function(input, output, session) {
     
     # Simulate a script run with a delay
     later::later(function() {
-      # Source the ISI Cluster Analysis script
-      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
+      # Try to source the ISI Cluster Analysis script
+      tryCatch({
+        source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/cluster_isi_script.R?raw=TRUE")
+        status("ISI Cluster Analysis Completed!")
+      }, error = function(e) {
+        status(paste("Error during ISI Cluster Analysis:", e$message))
+      })
       busy(FALSE)
-      status("ISI Cluster Analysis Completed!")
     }, delay = 2)  # Adjust delay as needed
   })
   
@@ -121,10 +141,14 @@ server <- function(input, output, session) {
     
     # Simulate a script run with a delay
     later::later(function() {
-      # Source the Arrhythmia Analysis script
-      source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
+      # Try to source the Arrhythmia Analysis script
+      tryCatch({
+        source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/arrythmia_script.R?raw=TRUE")
+        status("Arrhythmia Analysis Completed!")
+      }, error = function(e) {
+        status(paste("Error during Arrhythmia Analysis:", e$message))
+      })
       busy(FALSE)
-      status("Arrhythmia Analysis Completed!")
     }, delay = 2)  # Adjust delay as needed
   })
 }
