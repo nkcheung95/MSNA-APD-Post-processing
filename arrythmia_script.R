@@ -65,4 +65,75 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     sheet2<-read_xls(file.path(raw_file),sheet=2)#ap descriptions
     sheet3<-read_xls(file.path(raw_file),sheet=3)#ap shape
     sheet4<-read_xls(file.path(raw_file),sheet=4)#cluster summary
+    ##CLUSTER AP VISUAL PLOT
+    colnames(sheet3) <- c("AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
+    clusterfigdata <- sheet3[-c(1)]
+    clusterfigdata <- t(clusterfigdata)
+    aptime <- (1:nrow(clusterfigdata))
+    clusterfigdata <- cbind.data.frame(aptime,clusterfigdata)
+    clusterfigdata_melt <- melt(clusterfigdata,id=c(aptime))
+    clusterfigdata_melt <- clusterfigdata_melt[-c(2:32)]
+    ap_visual <- ggplot(clusterfigdata_melt,aes(aptime,value))+
+      geom_smooth()+
+      theme_classic()+
+      ggtitle("SMOOTHED AP")
+    ap_visual
+    #merge
+    all_ap <- merge(sheet2,sheet3)
+    all_ap <- drop_na(all_ap)
+    all_ap <- all_ap %>%
+      arrange(all_ap$'Cluster Number')
+    all_ap$`Cluster Number` <- as.factor(all_ap$`Cluster Number`)
+    # Get unique values from the cluster column
+    cluster_values <- unique(all_ap$`Cluster Number`)
+    
+    # Create a list to store the new dataframes
+    split_clusters <- list()
+    
+    # Loop through unique values and create a dataframe for each value
+    for (value in cluster_values) {
+      subset_df <- all_ap[all_ap$`Cluster Number` == value, ]
+      split_clusters[[value]] <- subset_df
+    }
+    ###AP PLOT PER CLUSTER
+    clusterplotlist <- list()
+    for (i in seq_along(split_clusters)) {
+      df <- split_clusters[[i]]
+      
+      #MELT TIME
+      sheet4_row2 <- c(sheet4[2,])
+      numeric_vector <- as.numeric(sheet4_row2)
+      max_y <- max(numeric_vector, na.rm = TRUE)
+      max_y <- max_y/2
+      df <- df[-c(2:5,7)]
+      df_t <- t(df[3:34])
+      df_t <- as.data.frame(t(df[3:34]))
+      df_t$Average <- rowMeans(df_t)
+      df_aptime <- list(1:32)
+      df_plot <- cbind.data.frame(df_aptime,df_t)
+      df_plot <- rename(df_plot,"ap_time"="1:32") 
+      df_plot <- melt(df_plot,id=c("ap_time"))
+      df_plotmean <- df_plot %>% filter(variable == 'Average')
+      clusterplotlist[[i]] <- ggplot(df_plotmean,aes(ap_time,value,fill=ap_time))+
+        geom_line()+
+        ggtitle(paste("cluster", levels(df$`Cluster Number`)[i]))+
+        ylim(-max_y,max_y)+
+        ylab("")+
+        xlab("")+
+        guides(fill = "none")+
+        theme_classic()+
+        theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.ticks.x = element_blank(),
+              axis.ticks.y = element_blank())
+      
+    }
+    clustervis <- grid.arrange(grobs = clusterplotlist, ncol = 4)
+    apshape_full <- grid.arrange(ap_visual,clustervis,ncol=2)
+    ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
+    
+    ######Multifire???
+    ###Cluster Latency/Amp
+
+  #####LOOP END
 }}
