@@ -64,16 +64,16 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     print(file.id)
   
   
-  sheet1<-read_xls(file.path(raw_file),sheet=1)
-  sheet2<-read_xls(file.path(raw_file),sheet=2)
-  sheet3<-read_xls(file.path(raw_file),sheet=3)
-  sheet4<-read_xls(file.path(raw_file),sheet=4)
-  sheet5<-read_xls(file.path(raw_file),sheet=5)
-  sheet6<-read_xls(file.path(raw_file),sheet=6)
+  summ_sheet<-read_xls(file.path(raw_file),sheet=1)
+  burst_sheet<-read_xls(file.path(raw_file),sheet=2)
+  ap_sheet<-read_xls(file.path(raw_file),sheet=3)
+  ap_shapes_sheet<-read_xls(file.path(raw_file),sheet=4)
+  clusters_sheet<-read_xls(file.path(raw_file),sheet=5)
+  rri_sheet<-read_xls(file.path(raw_file),sheet=6)
   
   ##CLUSTER AP VISUAL PLOT
-  colnames(sheet4) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
-  clusterfigdata <- sheet4[-c(1,2)]
+  colnames(ap_shapes_sheet) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
+  clusterfigdata <- ap_shapes_sheet[-c(1,2)]
   clusterfigdata <- t(clusterfigdata)
   aptime <- (1:nrow(clusterfigdata))
   clusterfigdata <- cbind.data.frame(aptime,clusterfigdata)
@@ -86,9 +86,9 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   ap_visual
   
   #AP Identifier
-  sheet3$ap_id <- sheet3$`Burst Number`+(sheet3$`AP Number`*0.01)
-  sheet4$ap_id <- sheet4$`Burst Number`+(sheet4$`AP Number`*0.01)
-  all_ap <- merge(sheet3,sheet4)
+  ap_sheet$ap_id <- ap_sheet$`Burst Number`+(ap_sheet$`AP Number`*0.01)
+  ap_shapes_sheet$ap_id <- ap_shapes_sheet$`Burst Number`+(ap_shapes_sheet$`AP Number`*0.01)
+  all_ap <- merge(ap_sheet,ap_shapes_sheet)
   all_ap <- drop_na(all_ap)
   ##CLUSTER SEPARATOR
   ###BASELINE
@@ -113,8 +113,8 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     df <- split_clusters[[i]]
     
     #MELT TIME
-    sheet5_row2 <- c(sheet5[2,])
-    numeric_vector <- as.numeric(sheet5_row2)
+    clusters_sheet_row2 <- c(clusters_sheet[2,])
+    numeric_vector <- as.numeric(clusters_sheet_row2)
     max_y <- max(numeric_vector, na.rm = TRUE)
     max_y <- max_y/2
     df <- df[-c(1,2,4:9,11)]
@@ -145,9 +145,9 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
   
   ###Firing probability
-  beats_total <- nrow(sheet6)
-  burst_total <- max(sheet2$`Burst Number`)
-  total_time <- as.numeric(max(sheet1$`Data Duration (s)`))
+  beats_total <- nrow(rri_sheet)
+  burst_total <- max(burst_sheet$`Burst Number`)
+  total_time <- as.numeric(max(summ_sheet$`Data Duration (s)`))
   #cluster cleaner
   cluster_prob_list <- list() 
   beats_prob_list <- list()
@@ -266,8 +266,8 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     lat_amp_with_clusters_list[[i]] <- lat_amp_with_clusters
     
     # Plot the clusters
-    min_latency <- min(sheet3$`AP Latency (s)`,na.rm=TRUE)
-    max_latency <- max(sheet3$`AP Latency (s)`,na.rm=TRUE)
+    min_latency <- min(ap_sheet$`AP Latency (s)`,na.rm=TRUE)
+    max_latency <- max(ap_sheet$`AP Latency (s)`,na.rm=TRUE)
     cols <- c("0" = "#868686FF", "1" = "#0073C2FF", "2" = "#EFC000FF", "3" = "#CD534CFF")
     cluster_lat_amp_list[[i]] <-  ggplot(lat_amp_with_clusters, aes(x = ap_latency, y = ap_amp, color = neuron_id)) +
       geom_point() +
@@ -302,7 +302,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   gridheight <- (length(combined_grobs_list)*2)
   ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15)
   
-  all_lat_amp <- sheet3[c(4,8,9)]
+  all_lat_amp <- ap_sheet[c(4,8,9)]
   all_lat_amp <- drop_na(all_lat_amp)
   colnames(all_lat_amp) <- c("ap_amp","ap_latency","Cluster")
   all_lat_amp$Cluster <- as.integer(all_lat_amp$Cluster)
@@ -365,13 +365,13 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   
   
   #BURST RRI CALC
-  burst_rri <- sheet6[c(1,6)]
+  burst_rri <- rri_sheet[c(1,6)]
   burst_rri <- burst_rri %>% filter(`Burst numbers`!= 0)
   burst_rri <- rename(burst_rri,"Burst Number"="Burst numbers")
   rri_neuron_df <- merge(neurons_df,burst_rri)
   rri_neuron_df <- rename(rri_neuron_df,"ap_loc_sec"="AP Location from the begining of the Section (s)")
   burstsort_df <- rri_neuron_df[-c(12:43)]
-  sort_amp <- sheet2
+  sort_amp <- burst_sheet
   sort_amp$sort <- order(sort_amp$`Burst Amp`)
   burstsort_df <- merge(burstsort_df,sort_amp)
   
