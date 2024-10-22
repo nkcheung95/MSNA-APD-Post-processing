@@ -6,7 +6,7 @@ packages <- c(
   "dbscan", "cluster", "ggsci", "grid", "gridExtra", 
   "purrr", "readxl", "ggpubr", "rstatix",
   "stringr", "magick", "fs", "patchwork", "factoextra",
-  "reshape","reshape2", "tidyverse","forcats","FNN","tcltk"
+  "reshape", "reshape2", "tidyverse", "forcats", "FNN", "tcltk"
 )
 
 # Function to install and load packages
@@ -82,20 +82,22 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     } else {
       cat("Unexpected number of sheets in file:", raw_file, "\n")
     }
-
-    all_ap <- merge(ap_sheet,ap_shapes_sheet)
+    
+    all_ap <- merge(ap_sheet, ap_shapes_sheet)
     all_ap <- drop_na(all_ap)
+    
     if (!"Burst Number" %in% colnames(all_ap)) {
       all_ap$`Burst Number` <- 1
     }
     
     colnames(all_ap)[colnames(all_ap) %in% c("AP Location (s)", "AP Location from the begining of the Section (s)")] <- "ap_loc_sec"
     
-    ##CLUSTER SEPARATOR
-    #Factor the clusters
+    ## CLUSTER SEPARATOR
+    # Factor the clusters
     all_ap <- all_ap %>%
-      arrange(all_ap$'Cluster Number')
+      arrange(all_ap$`Cluster Number`)
     all_ap$`Cluster Number` <- as.factor(all_ap$`Cluster Number`)
+    
     # Get unique values from the cluster column
     cluster_values <- unique(all_ap$`Cluster Number`)
     
@@ -107,14 +109,17 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       subset_df <- all_ap[all_ap$`Cluster Number` == value, ]
       split_clusters[[value]] <- subset_df
     }
+    
     # Function to calculate differences and store relevant information
     calculate_diff_info <- function(df) {
-      # For each Burst Number, calculate the absolute differences between adjacent values of 'ap_loc_sec'
       df %>%
+        # Group by 'Burst Number' and 'Cluster Number' to ensure calculations happen within these groups
         group_by(`Burst Number`, `Cluster Number`) %>%
-        # Calculate the difference between adjacent values using lag and take absolute value
-        mutate(ap_isi = abs(ap_loc_sec - lag(ap_loc_sec))) %>%
-        # Create a new dataframe with relevant information
+        # Sort within each group by 'ap_loc_sec' to ensure time is in the correct order
+        arrange(ap_loc_sec) %>%
+        # Calculate the difference between adjacent values of 'ap_loc_sec'
+        mutate(ap_isi = ap_loc_sec - lag(ap_loc_sec)) %>%
+        # Remove NA values that arise from the lag function
         filter(!is.na(ap_isi)) %>%
         select(`Burst Number`, `Cluster Number`, ap_isi)
     }
@@ -122,40 +127,12 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     # Apply the function to each dataframe in the list
     cluster_differences <- lapply(split_clusters, calculate_diff_info)
     
-    
-    # Function to calculate mean and sd of adjacent differences in 'ap_loc_sec' per Burst Number
-    calculate_diff_stats <- function(df) {
-      # For each Burst Number, calculate the absolute differences between adjacent values of 'ap_loc_sec'
-      df %>%
-        group_by(`Burst Number`) %>%
-        # Calculate the difference between adjacent values using lag and take absolute value
-        mutate(diff_ap_loc_sec = abs(ap_loc_sec - lag(ap_loc_sec))) %>%
-        # Remove NA values generated from the lag function
-        filter(!is.na(diff_ap_loc_sec)) %>%
-        # Summarize to get the mean and sd of the absolute adjacent differences
-        summarize(
-          mean_diff = mean(diff_ap_loc_sec, na.rm = TRUE),
-          sd_diff = sd(diff_ap_loc_sec, na.rm = TRUE)
-        )
-    }
-    
-    # Apply the function to each dataframe in the list
-    cluster_stats <- lapply(split_clusters, calculate_diff_stats)
-    
     # Combine all differences into a single data frame
     all_differences <- bind_rows(cluster_differences, .id = "Cluster")
     
     # Calculate the mean of ap_isi across all clusters and bursts
     mean_ap_isi <- mean(all_differences$ap_isi, na.rm = TRUE)
-    
-    # Print the mean value
-    cat("Mean ap_isi for file", file.id, "is:", mean_ap_isi, "\n")
-    
-    # Combine all differences into a single data frame
-    all_differences <- bind_rows(cluster_differences, .id = "Cluster")
-    
-    # Calculate the mean of ap_isi across all clusters and bursts
-    mean_ap_isi <- mean(all_differences$ap_isi, na.rm = TRUE)
+    max_isi <- max(all_differences$ap_isi, na.rm = TRUE)
     
     # Create a list to store plots
     plots_list <- list()
@@ -167,28 +144,32 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     for (cluster in unique_clusters) {
       # Filter data for the current cluster
       cluster_data <- all_differences %>% 
-        filter(Cluster == cluster) 
-
+        filter(Cluster == cluster)
+      
       # Generate the plot for the current cluster
-      p <- ggplot(cluster_data, aes(x = ap_isi, color = as.factor(`Burst Number`))) +
-        geom_density(alpha = 0.5) +  # Density plot
-        geom_point(position = position_jitter(width = 0, height = 0.1), aes(y = 0), size = 2) +  # Jittered points for visibility
-        geom_vline(xintercept = mean_ap_isi, linetype = "dashed", color = "red") +  # Vertical line for mean
-        xlim(0, 2 * mean_ap_isi) +  # Set x-axis limits
-        theme_minimal()+
+      p <- ggplot(cluster_data, aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))) +
+        # Overall cluster-level density plot with black line and grey shading
+        geom_density(data = cluster_data, aes(x = ap_isi), color = "black", fill = "grey", alpha = 0.3, linewidth = 1) +
+        # Add jittered points to show individual values
+        geom_point(position = position_jitter(width = 0, height = 0.1), aes(y = 0), size = 2) +
+        # Vertical red dashed line for mean_ap_isi
+        geom_vline(xintercept = mean_ap_isi, linetype = "dashed", color = "red") +
+        xlim(0, max_isi) +  # Set x-axis limits
+        labs(title = paste("Cluster", cluster)) +
+        theme_minimal() +
         theme(
           axis.title.x = element_blank(),  # Remove x-axis title
           axis.title.y = element_blank(),  # Remove y-axis title
           axis.text.y = element_blank(),    # Remove y-axis text
-          legend.position = "none")           # Remove legends  # Remove legends
+          legend.position = "none"           # Remove legends
+        )
       
       # Add plot to the list
       plots_list[[cluster]] <- p
     }
+    
     # Combine all plots into one vertical column using gridExtra
     combined_plot <- do.call(grid.arrange, c(plots_list, ncol = 1))
     
-    # Print the combined plot
-    print(combined_plot)
   }
 }

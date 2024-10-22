@@ -131,9 +131,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     clustervis <- grid.arrange(grobs = clusterplotlist, ncol = 4)
     apshape_full <- grid.arrange(ap_visual,clustervis,ncol=2)
     ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
-    
-    ######Multifire???
-    ###Cluster Latency/Amp
+
 
   #####LOOP END
 }}
