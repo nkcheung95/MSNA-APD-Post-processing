@@ -300,7 +300,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   grid <- grid.arrange(grobs = combined_grobs_list,ncol=1)
   cluster_summary <- arrangeGrob(grid, top = file.id)
   gridheight <- (length(combined_grobs_list)*2)
-  ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15)
+  ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15,limitsize = FALSE)
   
   all_lat_amp <- ap_sheet[c(4,8,9)]
   all_lat_amp <- drop_na(all_lat_amp)
