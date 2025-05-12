@@ -397,6 +397,22 @@ mean_ap_latency <- df_mean_ap_latency %>%
 group_by(`Burst Number`,`Cluster Number`, neuron_id) %>%  # Group by Cluster Number and neuron_id
 summarise(mean_ap_latency = mean(ap_latency, na.rm = TRUE),sd_ap_latency= sd(ap_latency, na.rm=T))  # Calculate the mean ap_latency
 write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latency_summary.csv")))
+
+  #####Cluster AP latency/amp extract
+    cluster_latamp_result <- all_ap %>%
+  group_by(`Cluster Number`) %>%
+  summarise(
+    # For AP Latency (s)
+    Mean_Latency = mean(`AP Latency (s)`, na.rm = TRUE),
+    SD_Latency = sd(`AP Latency (s)`, na.rm = TRUE),
+    
+    # For Peak-Peak Amp
+    Mean_PeakAmp = mean(`Peak-Peak Amp`, na.rm = TRUE),
+    SD_PeakAmp = sd(`Peak-Peak Amp`, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Optional: Removes grouping
+write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
+  
   ###SAVE R FILE FOR FUTURE USE
   # Save the R session inside the folder
   save.image(file.path(file_id_folder, paste0(file.id, "_session.RData")))
