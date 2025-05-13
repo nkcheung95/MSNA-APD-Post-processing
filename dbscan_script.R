@@ -123,7 +123,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     df_t$Average <- rowMeans(df_t)
     df_aptime <- list(1:32)
     df_plot <- cbind.data.frame(df_aptime,df_t)
-    df_plot <- rename(df_plot,"ap_time"="1:32") 
+    names(df_plot)[1] <- "ap_time"
     df_plot <- melt(df_plot,id=c("ap_time"))
     df_plotmean <- df_plot %>% filter(variable == 'Average')
     clusterplotlist[[i]] <- ggplot(df_plotmean,aes(ap_time,value,fill=ap_time))+
