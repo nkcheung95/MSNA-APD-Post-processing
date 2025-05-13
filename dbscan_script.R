@@ -156,7 +156,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   for (i in seq_along(split_clusters)) {
     cluster <- as.data.frame(split_clusters[[i]])
     cluster <- cluster[-c(12:44)]
-    cluster <- rename(cluster,"ap_loc_sec"="AP Location from the begining of the Section (s)")
+    names(cluster)[8] <- "ap_loc_sec"
     unique_bursts <- length(unique(cluster$`Burst Number`))
     beats_prob <- unique_bursts/beats_total*100
     offbeats_prob <- (beats_total-unique_bursts)/beats_total*100
