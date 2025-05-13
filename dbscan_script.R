@@ -412,18 +412,14 @@ write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latenc
   ) %>%
   ungroup()  # Optional: Removes grouping
 write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
-  
-#####Cluster normalizer 10
 
-clusters_amp <- data.frame(cluster_amplitude = unlist(clusters_sheet_row2))
-clusters_lat_sheet <-c(clusters_sheet[3,])
-clusters_lat <- data.frame(cluster_latency = unlist(clusters_lat_sheet))
-clusters_desc <- cbind.data.frame(clusters_amp,clusters_lat)
-# Check and convert columns to numeric if needed
-clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
-clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
-# Normalize cluster data into 10 percentile bins based on amplitude
-normalize_clusters <- function(clusters_desc) {
+#####NORMALIZER
+n<-ncol(clusters_sheet)
+normaliz_max<-clusters_sheet[5,n]
+last_6 <- substring(normaliz_max, nchar(normaliz_max) - 5)  # Extract last 6 characters
+normaliz_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
+normaliz_max <-as.numeric(normaliz_max)
+normalize_clusters <- function(clusters_desc, normaliz_max) {
   # Ensure we have at least 10 clusters to avoid empty bins
   if (nrow(clusters_desc) < 10) {
     warning("Fewer than 10 clusters - some bins may be empty or contain few points")
@@ -439,10 +435,14 @@ normalize_clusters <- function(clusters_desc) {
     labels = FALSE
   )
   
-  # Calculate mean amplitude and latency per bin
+  # Calculate **median** amplitude and latency per bin
   result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
                       data = clusters_desc, 
-                      FUN = mean)
+                      FUN = median)
+  
+  # Normalize values using `normaliz_max`
+  result$cluster_amplitude <- result$cluster_amplitude / normaliz_max * 100
+  result$cluster_latency <- result$cluster_latency / normaliz_max * 100
   
   # Add percentile range labels
   result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
@@ -455,7 +455,7 @@ normalize_clusters <- function(clusters_desc) {
 }
 
 # Usage:
-binned_clusters <- normalize_clusters(clusters_desc)
+binned_clusters <- normalize_clusters(clusters_desc, normaliz_max)
 
 write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
 
