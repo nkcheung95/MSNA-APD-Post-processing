@@ -452,7 +452,7 @@ normalize_clusters <- function(clusters_desc, normal) {
                       FUN = median)
   
   # Add percentile range labels (relative to normal)
-  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "% of normal")
+  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
   
   # Order by bin and clean up output
   result <- result[order(result$percentile_bin), 
