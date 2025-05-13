@@ -281,8 +281,8 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       theme_classic()
     
   }
-  lat_amp_summary <- grid.arrange(grobs=cluster_lat_amp_list,ncol=4)
-  ggsave("latency_amplitude.png",lat_amp_summary,path = plots_folder, height=15,width=15)
+  lat_amp_summary <- grid.arrange(grobs=cluster_lat_amp_list,ncol=1)
+  
   
   ###PLOT COMBINE 
   layout_matrix <- rbind(c(1, 2, 3, 3))
@@ -301,7 +301,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   cluster_summary <- arrangeGrob(grid, top = file.id)
   gridheight <- (length(combined_grobs_list)*2)
   ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15,limitsize = FALSE)
-  
+  ggsave("latency_amplitude.png",lat_amp_summary,path = plots_folder, height=gridheight,width=15,limitsize=FALSE)
   all_lat_amp <- ap_sheet[c(4,8,9)]
   all_lat_amp <- drop_na(all_lat_amp)
   colnames(all_lat_amp) <- c("ap_amp","ap_latency","Cluster")
