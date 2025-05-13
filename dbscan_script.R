@@ -413,7 +413,57 @@ write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latenc
   ungroup()  # Optional: Removes grouping
 write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
   
-  ###SAVE R FILE FOR FUTURE USE
+#####Cluster normalizer 10
+
+clusters_amp <- as.data.frame(clusters_sheet_row2)
+clusters_lat <- as.data.frame(clusters_sheet[3,])
+clusters_lat <- t(clusters_lat)
+clusters_desc <- cbind.data.frame(clusters_amp,clusters_lat)
+colnames(clusters_desc) <- c("cluster_amplitude","cluster_latency")
+clusters_desc <- as.data.frame(clusters_desc)
+# Check and convert columns to numeric if needed
+clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
+clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
+# Normalize cluster data into 10 percentile bins based on amplitude
+normalize_clusters <- function(clusters_desc) {
+  # Ensure we have at least 10 clusters to avoid empty bins
+  if (nrow(clusters_desc) < 10) {
+    warning("Fewer than 10 clusters - some bins may be empty or contain few points")
+  }
+  
+  # Create percentile bins (0-10%, 10-20%, ..., 90-100%)
+  clusters_desc$percentile_bin <- cut(
+    clusters_desc$cluster_amplitude,
+    breaks = quantile(clusters_desc$cluster_amplitude, 
+                      probs = seq(0, 1, length.out = 11),
+                      na.rm = TRUE),
+    include.lowest = TRUE,
+    labels = FALSE
+  )
+  
+  # Calculate mean amplitude and latency per bin
+  result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
+                      data = clusters_desc, 
+                      FUN = mean)
+  
+  # Add percentile range labels
+  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
+  
+  # Order by bin and clean up output
+  result <- result[order(result$percentile_bin), 
+                   c("percentile_bin", "percentile_range", "cluster_amplitude", "cluster_latency")]
+  
+  return(result)
+}
+
+# Usage:
+binned_clusters <- normalize_clusters(clusters_desc)
+
+write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
+
+
+
+#####SAVE R FILE FOR FUTURE USE
   # Save the R session inside the folder
   save.image(file.path(file_id_folder, paste0(file.id, "_session.RData")))
   #save and clean environment for new session
