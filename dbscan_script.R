@@ -419,16 +419,16 @@ normaliz_max<-clusters_sheet[5,n]
 last_6 <- substring(normaliz_max, nchar(normaliz_max) - 5)  # Extract last 6 characters
 normaliz_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
 normaliz_max <-as.numeric(normaliz_max)
-normalize_clusters <- function(clusters_desc, normaliz_max) {
+normalize_clusters <- function(data, normal) {
   # Ensure we have at least 10 clusters to avoid empty bins
-  if (nrow(clusters_desc) < 10) {
+  if (nrow(data) < 10) {
     warning("Fewer than 10 clusters - some bins may be empty or contain few points")
   }
   
   # Create percentile bins (0-10%, 10-20%, ..., 90-100%)
-  clusters_desc$percentile_bin <- cut(
-    clusters_desc$cluster_amplitude,
-    breaks = quantile(clusters_desc$cluster_amplitude, 
+  data$percentile_bin <- cut(
+    data$cluster_amplitude,
+    breaks = quantile(data$cluster_amplitude, 
                       probs = seq(0, 1, length.out = 11),
                       na.rm = TRUE),
     include.lowest = TRUE,
@@ -437,12 +437,12 @@ normalize_clusters <- function(clusters_desc, normaliz_max) {
   
   # Calculate **median** amplitude and latency per bin
   result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
-                      data = clusters_desc, 
+                      data = data, 
                       FUN = median)
   
   # Normalize values using `normaliz_max`
-  result$cluster_amplitude <- result$cluster_amplitude / normaliz_max * 100
-  result$cluster_latency <- result$cluster_latency / normaliz_max * 100
+  result$cluster_amplitude <- result$cluster_amplitude / normal * 100
+  result$cluster_latency <- result$cluster_latency / normal * 100
   
   # Add percentile range labels
   result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
