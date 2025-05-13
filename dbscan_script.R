@@ -413,47 +413,43 @@ write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latenc
   ungroup()  # Optional: Removes grouping
 write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
 
-#####NORMALIZER
-
+##### Cluster normalizer based on variable 'normal'
 clusters_amp <- data.frame(cluster_amplitude = unlist(clusters_sheet_row2))
-clusters_lat_sheet <-c(clusters_sheet[3,])
+clusters_lat_sheet <- c(clusters_sheet[3,])
 clusters_lat <- data.frame(cluster_latency = unlist(clusters_lat_sheet))
-clusters_desc <- cbind.data.frame(clusters_amp,clusters_lat)
+clusters_desc <- cbind.data.frame(clusters_amp, clusters_lat)
 # Check and convert columns to numeric if needed
 clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
 clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
-n<-ncol(clusters_sheet)
-normaliz_max<-clusters_sheet[5,n]
-last_6 <- substring(normaliz_max, nchar(normaliz_max) - 5)  # Extract last 6 characters
-normaliz_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
-normaliz_max <-as.numeric(normaliz_max)
-normalize_clusters <- function(data, normal) {
+
+# Normalize cluster data into 10 percentile bins based on amplitude relative to 'normal'
+normalize_clusters <- function(clusters_desc, normal) {
   # Ensure we have at least 10 clusters to avoid empty bins
-  if (nrow(data) < 10) {
+  if (nrow(clusters_desc) < 10) {
     warning("Fewer than 10 clusters - some bins may be empty or contain few points")
   }
   
-  # Create percentile bins (0-10%, 10-20%, ..., 90-100%)
-  data$percentile_bin <- cut(
-    data$cluster_amplitude,
-    breaks = quantile(data$cluster_amplitude, 
-                      probs = seq(0, 1, length.out = 11),
-                      na.rm = TRUE),
+  # Calculate breaks based on normal value (100%)
+  max_amplitude <- max(clusters_desc$cluster_amplitude, na.rm = TRUE)
+  scaling_factor <- normal / max_amplitude
+  scaled_amplitudes <- clusters_desc$cluster_amplitude * scaling_factor
+  
+  # Create percentile bins (0-10%, 10-20%, ..., 90-100%) of the normal value
+  percentile_breaks <- seq(0, normal, length.out = 11)
+  clusters_desc$percentile_bin <- cut(
+    scaled_amplitudes,
+    breaks = percentile_breaks,
     include.lowest = TRUE,
     labels = FALSE
   )
   
-  # Calculate **median** amplitude and latency per bin
+  # Calculate mean amplitude and latency per bin
   result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
-                      data = data, 
+                      data = clusters_desc, 
                       FUN = median)
   
-  # Normalize values using `normaliz_max`
-  result$cluster_amplitude <- result$cluster_amplitude / normal * 100
-  result$cluster_latency <- result$cluster_latency / normal * 100
-  
-  # Add percentile range labels
-  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
+  # Add percentile range labels relative to normal value
+  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "% of normal")
   
   # Order by bin and clean up output
   result <- result[order(result$percentile_bin), 
@@ -461,9 +457,6 @@ normalize_clusters <- function(data, normal) {
   
   return(result)
 }
-
-# Usage:
-binned_clusters <- normalize_clusters(clusters_desc, normaliz_max)
 
 write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
 
