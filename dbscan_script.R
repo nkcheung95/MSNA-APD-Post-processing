@@ -415,12 +415,10 @@ write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_clu
   
 #####Cluster normalizer 10
 
-clusters_amp <- as.data.frame(clusters_sheet_row2)
-clusters_lat <- as.data.frame(clusters_sheet[3,])
-clusters_lat <- t(clusters_lat)
+clusters_amp <- data.frame(cluster_amplitude = unlist(clusters_sheet_row2))
+clusters_lat_sheet <-c(clusters_sheet[3,])
+clusters_lat <- data.frame(cluster_latency = unlist(clusters_lat_sheet))
 clusters_desc <- cbind.data.frame(clusters_amp,clusters_lat)
-colnames(clusters_desc) <- c("cluster_amplitude","cluster_latency")
-clusters_desc <- as.data.frame(clusters_desc)
 # Check and convert columns to numeric if needed
 clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
 clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
