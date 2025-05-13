@@ -262,7 +262,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     # Combine lat_amp and cluster_assignments
     
     lat_amp_with_clusters <- cbind(lat_amp, Cluster = factor(cluster_assignments))
-    lat_amp_with_clusters <- rename(lat_amp_with_clusters,"neuron_id"="Cluster")
+    names(lat_amp_with_clusters)[5] <- "neuron_id"
     lat_amp_with_clusters_list[[i]] <- lat_amp_with_clusters
     
     # Plot the clusters
@@ -367,9 +367,9 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   #BURST RRI CALC
   burst_rri <- rri_sheet[c(1,6)]
   burst_rri <- burst_rri %>% filter(`Burst numbers`!= 0)
-  burst_rri <- rename(burst_rri,"Burst Number"="Burst numbers")
+  names(burst_rri)[1] <- "Burst Number"
   rri_neuron_df <- merge(neurons_df,burst_rri)
-  rri_neuron_df <- rename(rri_neuron_df,"ap_loc_sec"="AP Location from the begining of the Section (s)")
+  names(rri_neuron_df)[8] <- "ap_loc_sec"
   burstsort_df <- rri_neuron_df[-c(12:43)]
   sort_amp <- burst_sheet
   sort_amp$sort <- order(sort_amp$`Burst Amp`)
