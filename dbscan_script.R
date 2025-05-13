@@ -338,7 +338,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     dbscan_split_clusters_list[[i]]$neuron_id <- as.factor(dbscan_split_clusters_list[[i]]$neuron_id)
     #Cluster Timeline
     dbcluster <- dbscan_split_clusters_list[[i]]
-    dbcluster <- rename(dbcluster,"ap_loc_sec"="AP Location from the begining of the Section (s)")
+    names(dbcluster)[8] <- "ap_loc_sec"
     timeline_list[[i]] <- ggplot(dbcluster, aes(ap_loc_sec,'Cluster Number',color=neuron_id))+
       geom_vline(xintercept = dbcluster$ap_loc_sec,color=dbcluster$neuron_id,linewidth=0.5)+
       xlim(0,total_time)+
