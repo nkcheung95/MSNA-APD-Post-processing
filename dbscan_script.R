@@ -423,15 +423,22 @@ clusters_desc <- cbind.data.frame(clusters_amp, clusters_lat)
 # Check and convert columns to numeric if needed
 clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
 clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
-n<-ncol(clusters_sheet)
-normal_max<-clusters_sheet[5,n]
-last_6 <- substring(normal_max, nchar(normal_max) - 5)  # Extract last 6 characters
-normal_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
-normal_max <-as.numeric(normal_max)
-normal_min<-clusters_sheet[5,1]
-normal_min <- substring(normal_min, nchar(normal_min) - 11)  # Extract last 6 characters
-normal_min <- substring(normal_min, 1, nchar(normal_min) - 7)  # Remove the last character
-normal_min <-as.numeric(normal_min)
+# Extract min and max from clusters_sheet
+n <- ncol(clusters_sheet)
+
+# Extract numbers from the cell
+extract_numbers <- function(text) {
+  numbers <- str_extract_all(text, "\\d+\\.\\d+")[[1]]
+  return(as.numeric(numbers))
+}
+
+# For normal_min (first number in parentheses)
+normal_min_text <- clusters_sheet[5, 1]
+normal_min <- extract_numbers(normal_min_text)[1]  # First number
+
+# For normal_max (second number in parentheses)
+normal_max_text <- clusters_sheet[5, n]
+normal_max <- extract_numbers(normal_max_text)[2]  # Second number
 
 
 # Normalize cluster data into 10 percentile bins based on reference 'normal' value
