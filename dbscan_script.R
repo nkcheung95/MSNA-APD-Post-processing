@@ -424,20 +424,25 @@ clusters_desc <- cbind.data.frame(clusters_amp, clusters_lat)
 clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
 clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
 n<-ncol(clusters_sheet)
-normaliz_max<-clusters_sheet[5,n]
-last_6 <- substring(normaliz_max, nchar(normaliz_max) - 5)  # Extract last 6 characters
-normaliz_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
-normaliz_max <-as.numeric(normaliz_max)
+normal_max<-clusters_sheet[5,n]
+last_6 <- substring(normal_max, nchar(normal_max) - 5)  # Extract last 6 characters
+normal_max <- substring(last_6, 1, nchar(last_6) - 1)  # Remove the last character
+normal_max <-as.numeric(normal_max)
+normal_min<-clusters_sheet[5,1]
+normal_min <- substring(normal_min, nchar(normal_min) - 11)  # Extract last 6 characters
+normal_min <- substring(normal_min, 1, nchar(normal_min) - 7)  # Remove the last character
+normal_min <-as.numeric(normal_min)
+
 
 # Normalize cluster data into 10 percentile bins based on reference 'normal' value
-normalize_clusters <- function(clusters_desc, normal) {
+normalize_clusters <- function(clusters_desc, normal,normal_min) {
   # Ensure we have at least 10 clusters to avoid empty bins
   if (nrow(clusters_desc) < 10) {
     warning("Fewer than 10 clusters - some bins may be empty or contain few points")
   }
   
   # Create percentile breaks based on the reference 'normal' value (0% to 100% of normal)
-  percentile_breaks <- seq(0, normal, length.out = 11)
+  percentile_breaks <- seq(normal_min, normal, length.out = 11)
   
   # Bin the amplitudes according to the reference breaks
   clusters_desc$percentile_bin <- cut(
@@ -462,7 +467,7 @@ normalize_clusters <- function(clusters_desc, normal) {
   return(result)
 }
 
-binned_clusters <- normalize_clusters(clusters_desc, normaliz_max)
+binned_clusters <- normalize_clusters(clusters_desc, normal_max,normal_min)
 write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
 
 
