@@ -352,9 +352,9 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       xlab("")
     
   }
-  timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
-  timelength <- length(combined_grobs_list)
-  ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
+  #timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
+  #timelength <- length(combined_grobs_list)
+  #ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
   #Amplitude sorted cluster plot
   
   
