@@ -300,6 +300,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   grid <- grid.arrange(grobs = combined_grobs_list,ncol=1)
   cluster_summary <- arrangeGrob(grid, top = file.id)
   gridheight <- (length(combined_grobs_list)*2)
+  lat_amp_summary <- arrangeGrob(lat_amp_summary, top=file.id)
   ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15,limitsize = FALSE)
   ggsave("latency_amplitude.png",lat_amp_summary,path = plots_folder, height=gridheight,width=15,limitsize=FALSE)
   all_lat_amp <- ap_sheet[c(4,8,9)]
