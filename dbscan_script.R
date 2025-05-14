@@ -197,6 +197,36 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   
   ggsave("cluster_prob.png",cluster_prob,path = plots_folder,width=15,height=15)
   
+  # Extract and reshape data from all plots
+  beats_data <- beats_prob_list %>%
+    imap_dfr(~ {
+      .x$data %>% 
+        mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+        select(cluster, variable, value)
+    }) %>%
+    pivot_wider(
+      names_from = variable, 
+      values_from = value,
+      names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
+    ) %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
+  
+  bursts_data <- cluster_prob_list %>%
+    imap_dfr(~ {
+      .x$data %>% 
+        mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+        select(cluster, variable, value)
+    }) %>%
+    pivot_wider(
+      names_from = variable, 
+      values_from = value,
+      names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
+    ) %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
+
+  prob_data <- merge(beats_data,bursts_data,by = "cluster")
+  
+  
   ###MULTIFIRE
   multifire_list<- list()
   for (i in seq_along(split_clusters)) {
@@ -223,9 +253,28 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       guides(fill="none")+
       theme_classic()
   }
+  # Step 1: Extract data from each ggplot and combine
+  multifire_data <- multifire_list %>%
+    imap_dfr(~ {
+      .x$data %>%
+        mutate(cluster = .y) %>%  # .y = cluster number (list index)
+        select(cluster, Multiple_firings, Frequency, Probability)
+    }) %>%
+    pivot_wider(
+      names_from = Multiple_firings,
+      values_from = c(Frequency, Probability),
+      names_glue = "{.value}_{Multiple_firings}"  # Format: "frequency_1", "probability_1", etc.
+    )
+  prob_data <- merge(prob_data,multifire_data,by="cluster")
+  
+  # Step 2: Clean column names (optional, if needed)
+  combined_data <- combined_data %>%
+    rename_with(~ gsub("frequency_", "freq_", .x))  # Rename "frequency_1" to "freq_1"
+  
   multifire_prob <- grid.arrange(grobs = multifire_list, ncol = 4)
   
   ggsave("multifire_prob.png",multifire_prob,path = plots_folder,width=15,height=15)
+  write.csv(prob_data,file.path(file_id_folder, paste0(file.id, "_probabilities_multifire.csv")))
   
   
   ###Cluster Latency/Amp
