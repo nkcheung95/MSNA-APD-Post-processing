@@ -268,7 +268,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   prob_data <- merge(prob_data,multifire_data,by="cluster")
   
   # Step 2: Clean column names (optional, if needed)
-  combined_data <- combined_data %>%
+multifire_data <- multifire_data %>%
     rename_with(~ gsub("frequency_", "freq_", .x))  # Rename "frequency_1" to "freq_1"
   
   multifire_prob <- grid.arrange(grobs = multifire_list, ncol = 4)
