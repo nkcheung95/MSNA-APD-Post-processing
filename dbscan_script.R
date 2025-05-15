@@ -274,7 +274,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   multifire_prob <- grid.arrange(grobs = multifire_list, ncol = 4)
   
   ggsave("multifire_prob.png",multifire_prob,path = plots_folder,width=15,height=15)
-  write.csv(prob_data,file.path(file_id_folder, paste0(file.id, "_probabilities_multifire.csv")))
+  write.csv(prob_data,file.path(file_id_folder, paste0(file.id, "_probabilities.csv")))
   
   
   ###Cluster Latency/Amp
@@ -442,26 +442,27 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
   }
   
   #####AP DBSCAN mean_latency summary
-df_mean_ap_latency <- do.call(rbind, dbscan_split_clusters_list)
-mean_ap_latency <- df_mean_ap_latency %>%
-group_by(`Burst Number`,`Cluster Number`, neuron_id) %>%  # Group by Cluster Number and neuron_id
-summarise(mean_ap_latency = mean(ap_latency, na.rm = TRUE),sd_ap_latency= sd(ap_latency, na.rm=T))  # Calculate the mean ap_latency
+  df_mean_ap_latency <- bind_rows(dbscan_split_clusters_list, .id = "cluster_name")
+locator_ap_latency <- df_mean_ap_latency %>%
+group_by(`Burst Number`,cluster_name, neuron_id) %>%  # Group by Cluster Number and neuron_id
+summarise(locator_ap_latency = mean(ap_latency, na.rm = TRUE),sd_ap_latency= sd(ap_latency, na.rm=T))  # Calculate the mean ap_latency
+write.csv(locator_ap_latency,file.path(file_id_folder, paste0(file.id, "LOCATOR_AP.csv")))
+
+
+mean_ap_latency <- df_mean_ap_latency  %>%
+  group_by(cluster_name) %>%
+  summarise(across(
+    c(ap_latency, ap_amp),
+    list(
+      median = ~median(., na.rm = TRUE),
+      iqr = ~IQR(., na.rm = TRUE),
+      q1 = ~quantile(., 0.25, na.rm = TRUE),
+      q3 = ~quantile(., 0.75, na.rm = TRUE)
+    )
+  ))
+
 write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latency_summary.csv")))
 
-  #####Cluster AP latency/amp extract
-    cluster_latamp_result <- all_ap %>%
-  group_by(`Cluster Number`) %>%
-  summarise(
-    # For AP Latency (s)
-    Mean_Latency = mean(`AP Latency (s)`, na.rm = TRUE),
-    SD_Latency = sd(`AP Latency (s)`, na.rm = TRUE),
-    
-    # For Peak-Peak Amp
-    Mean_PeakAmp = mean(`Peak-Peak Amp`, na.rm = TRUE),
-    SD_PeakAmp = sd(`Peak-Peak Amp`, na.rm = TRUE)
-  ) %>%
-  ungroup()  # Optional: Removes grouping
-write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
 
 #####SEPARATE DBSCAN CLUSTERS
 dbcluster_prob_list <- list()
@@ -573,7 +574,7 @@ dbbursts_data <- dbcluster_prob_list %>%
 
 dbprob_data <- merge(dbbeats_data,dbbursts_data,by = "cluster")
 
-# Initialize the list with names from dbscan_split_clusters_list
+# Initialize the list with names from list
 dbmultifire_list <- vector("list", length(dbprocessed_list))
 names(dbmultifire_list) <- names(dbprocessed_list)
 
@@ -622,6 +623,21 @@ dbmultifire_data <- dbmultifire_list %>%
 
 dbprob_data <- merge(dbprob_data,dbmultifire_data,by="cluster")
 write.csv(dbprob_data,file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
+#####AP DBSCAN mean_latency summary
+df_dbmean_ap_latency <- bind_rows(dbprocessed_list, .id = "cluster_name")
+dbmean_ap_latency <- df_dbmean_ap_latency  %>%
+  group_by(cluster_name) %>%
+  summarise(across(
+    c(ap_latency, ap_amp),
+    list(
+      median = ~median(., na.rm = TRUE),
+      iqr = ~IQR(., na.rm = TRUE),
+      q1 = ~quantile(., 0.25, na.rm = TRUE),
+      q3 = ~quantile(., 0.75, na.rm = TRUE)
+    )
+  ))
+
+ write.csv(dbmean_ap_latency,file.path(file_id_folder, paste0(file.id, "DBSCAN_apd_latency_summary.csv")))
 
 
 ##### Cluster normalizer using reference 'normal' value for percentiles
