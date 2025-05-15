@@ -463,6 +463,166 @@ write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latenc
   ungroup()  # Optional: Removes grouping
 write.csv( cluster_latamp_result,file.path(file_id_folder, paste0(file.id, "_cluster_description.csv")))
 
+#####SEPARATE DBSCAN CLUSTERS
+dbcluster_prob_list <- list()
+dbbeats_prob_list <- list()
+split_list_by_neuron <- function(original_list) {
+  # Initialize empty list for results
+  result_list <- list()
+  
+  # Process each element
+  walk(seq_along(original_list), function(i) {
+    item <- original_list[[i]]
+    
+    if ("neuron_id" %in% names(item) && is.factor(item$neuron_id)) {
+      # Split into level 1 and level 2
+      level1 <- item %>% filter(neuron_id != 2)
+      level2 <- item %>% filter(neuron_id == 2)
+      
+      # Add level 1 to original position
+      result_list[[as.character(i)]] <<- level1
+      
+      # Add level 2 to new position if it exists
+      if (nrow(level2) > 0) {
+        result_list[[paste0(i, "_2")]] <<- level2
+      }
+    } else {
+      # Keep unchanged if no neuron_id or not factor
+      result_list[[as.character(i)]] <<- item
+    }
+  })
+  
+  return(result_list)
+}
+
+# Usage:
+dbprocessed_list <- split_list_by_neuron(dbscan_split_clusters_list)
+
+# Initialize your lists with the same names as dbprocessed_list
+dbcluster_prob_list <- vector("list", length(dbprocessed_list))
+names(dbcluster_prob_list) <- names(dbprocessed_list)
+
+dbbeats_prob_list <- vector("list", length(dbprocessed_list))
+names(dbbeats_prob_list) <- names(dbprocessed_list)
+
+for (i in seq_along(dbprocessed_list)) {
+  cluster <- as.data.frame(dbprocessed_list[[i]])
+  cluster <- cluster[-c(12:44)]
+  names(cluster)[8] <- "ap_loc_sec"
+  
+  unique_bursts <- length(unique(cluster$`Burst Number`))
+  beats_prob <- unique_bursts/beats_total*100
+  offbeats_prob <- (beats_total-unique_bursts)/beats_total*100
+  cluster_prob <- unique_bursts/burst_total*100
+  off_prob <- (burst_total-unique_bursts)/burst_total*100
+  
+  beats_df <- cbind.data.frame(offbeats_prob, beats_prob)
+  beats_df_melt <- melt(beats_df)
+  prob_df <- cbind.data.frame(off_prob, cluster_prob)
+  prob_df_melt <- melt(prob_df)
+  
+  # Use the original name from dbprocessed_list for the title
+  original_name <- names(dbprocessed_list)[i]
+  
+  dbcluster_prob_list[[i]] <- ggplot(prob_df_melt, aes(variable, value, fill=variable)) +
+    geom_col() +
+    ggtitle(paste("cluster", original_name)) +  # Use original name here
+    ylim(0, 100) +
+    ylab("Probability") +
+    xlab("") +
+    scale_fill_jco() +
+    guides(fill = "none") +
+    theme_classic()
+  
+  dbbeats_prob_list[[i]] <- ggplot(beats_df_melt, aes(variable, value, fill=variable)) +
+    geom_col() +
+    ggtitle(paste("cluster", original_name)) +  # Use original name here
+    ylim(0, 100) +
+    ylab("Probability") +
+    xlab("") +
+    scale_fill_jco() +
+    guides(fill = "none") +
+    theme_classic()
+}
+# Extract and reshape data from all plots
+dbbeats_data <- dbbeats_prob_list %>%
+  imap_dfr(~ {
+    .x$data %>% 
+      mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+      select(cluster, variable, value)
+  }) %>%
+  pivot_wider(
+    names_from = variable, 
+    values_from = value,
+    names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
+  ) %>%
+  rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
+
+dbbursts_data <- dbcluster_prob_list %>%
+  imap_dfr(~ {
+    .x$data %>% 
+      mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+      select(cluster, variable, value)
+  }) %>%
+  pivot_wider(
+    names_from = variable, 
+    values_from = value,
+    names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
+  ) %>%
+  rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
+
+dbprob_data <- merge(dbbeats_data,dbbursts_data,by = "cluster")
+
+# Initialize the list with names from dbscan_split_clusters_list
+dbmultifire_list <- vector("list", length(dbprocessed_list))
+names(dbmultifire_list) <- names(dbprocessed_list)
+
+for (i in seq_along(dbprocessed_list)) {
+  cluster <- as.data.frame(dbprocessed_list[[i]])
+  cluster <- cluster[-c(12:44)]
+  
+  # Count the occurrences of each numeric value
+  cluster_counts <- table(cluster$`Burst Number`)
+  
+  # Create a summary table
+  summary_table <- table(factor(cluster_counts, levels = 1:6, labels = c("1", "2", "3", "4", "5", "6+")))
+  
+  # Convert the summary table to a data frame
+  dbmultifire_df <- as.data.frame(summary_table)
+  
+  # Rename the columns
+  colnames(dbmultifire_df) <- c("Multiple_firings", "Frequency")
+  freq_total <- sum(dbmultifire_df$Frequency)
+  dbmultifire_df$Probability <- dbmultifire_df$Frequency/freq_total*100
+  
+  # Get the original cluster name
+  original_name <- names(dbscan_split_clusters_list)[i]
+  
+  dbmultifire_list[[i]] <- ggplot(dbmultifire_df, aes(Multiple_firings, Probability, fill = Multiple_firings)) +
+    geom_col() +
+    ggtitle(paste("cluster", original_name)) +  # Use original name here
+    ylim(0, 100) +
+    scale_fill_jco() +
+    guides(fill = "none") +
+    theme_classic()
+}
+
+# Step 1: Extract data from each ggplot and combine
+dbmultifire_data <- dbmultifire_list %>%
+  imap_dfr(~ {
+    .x$data %>%
+      mutate(cluster = .y) %>%  # .y will now be the original name
+      select(cluster, Multiple_firings, Frequency, Probability)
+  }) %>%
+  pivot_wider(
+    names_from = Multiple_firings,
+    values_from = c(Frequency, Probability),
+    names_glue = "{.value}_{Multiple_firings}"
+  )
+
+dbprob_data <- merge(dbprob_data,dbmultifire_data,by="cluster")
+write.csv(dbprob_data,file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
+
 
 ##### Cluster normalizer using reference 'normal' value for percentiles
 clusters_amp <- data.frame(cluster_amplitude = unlist(clusters_sheet_row2))
