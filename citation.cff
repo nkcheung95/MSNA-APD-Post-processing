@@ -5,7 +5,7 @@ authors:
   given-names: "Cheung"
   orcid: "https://orcid.org/0000-0002-5758-6335"
 title: "MSNA-APD-Post-processing"
-version:0.3
-doi:
+version: "0.3"
+doi: ""
 date-released: 2025-08-01
 url: "https://github.com/nkcheung95/MSNA-APD-Post-processing"
