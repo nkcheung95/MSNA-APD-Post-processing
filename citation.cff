@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-- family-names: "Nicholas"
-  given-names: "Cheung"
+- family-names: "Cheung"
+  given-names: "Nicholas KY"
   orcid: "https://orcid.org/0000-0002-5758-6335"
 title: "MSNA-APD-Post-processing"
 version: "0.3"
