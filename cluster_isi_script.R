@@ -170,7 +170,7 @@ multicount <- cluster_data %>%
     n_4fire    <- sum(multicount$n_4fire)
     `n_5+fire` <- sum(multicount$`n_5+fire`)
       
-    output_data <- data.frame(file.id,cluster,cl_isi_count,cl_ap_isi_me,cl_ap_isi_sd,cl_ap_isi_md,cl_ap_isi_iqr,n_2fire,n_3fire,n_4fire,`n_5+fire`)
+    output_data <- data.frame(file.id,cluster,cl_isi_count,cl_ap_isi_me,cl_ap_isi_sd,cl_ap_isi_md,cl_ap_isi_iqr,cl_ap_isi_min,cl_ap_isi_max,n_2fire,n_3fire,n_4fire,`n_5+fire`)
       
       # Generate the plot for the current cluster
       p <- ggplot(cluster_data, aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))) +
