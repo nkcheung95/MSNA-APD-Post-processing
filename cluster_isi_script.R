@@ -150,6 +150,8 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     cl_ap_isi_me <- mean(cluster_data$ap_isi, na.rm = TRUE)
     cl_ap_isi_sd <- sd(cluster_data$ap_isi, na.rm = TRUE)
     cl_ap_isi_iqr <- IQR(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_min <- min(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_max <- max(cluster_data$ap_isi, na.rm = TRUE)
     cl_isi_count <- nrow(cluster_data)
 multicount <- cluster_data %>%
   group_by(Cluster, `Burst Number`) %>%
@@ -206,7 +208,7 @@ combined_plot <- do.call(grid.arrange, c(plots_list, list(file_label), ncol = 1)
     #dataframe for export
     isi_output <- bind_rows(data_list)
 
-    ggsave(file.path(plots_folder,paste(file.id,"_isi_plot.png"),plot=combined_plot, width = 6, height = (length(plots_list)*1.5),)
-    write.csv(isi_output,file.path(file_id_folder, paste(file.id,"_isi_summary.csv"))
+    ggsave((file.path(plots_folder,paste(file.id,"_isi_plot.png"))),plot=combined_plot, width = 6, height = (length(plots_list)*1.5),)
+    write.csv(isi_output,file.path(file_id_folder, paste(file.id,"_isi_summary.csv")))
   }
 }
