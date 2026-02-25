@@ -206,7 +206,7 @@ combined_plot <- do.call(grid.arrange, c(plots_list, list(file_label), ncol = 1)
     #dataframe for export
     isi_output <- bind_rows(data_list)
 
-    ggsave(paste(file.id,"isi_plot.png"),plot=combined_plot, width = 6, height = (length(plots_list)*1.5),)
-    write.csv(isi_output,paste(file.id,"isi_summary.csv"))
+    ggsave(file.path(plots_folder,paste(file.id,"_isi_plot.png"),plot=combined_plot, width = 6, height = (length(plots_list)*1.5),)
+    write.csv(isi_output,file.path(file_id_folder, paste(file.id,"_isi_summary.csv"))
   }
 }
