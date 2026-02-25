@@ -136,7 +136,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     
     # Create a list to store plots
     plots_list <- list()
-    
+    data_list <- list()
     # Get unique clusters
     unique_clusters <- unique(all_differences$Cluster)
     
@@ -145,6 +145,30 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       # Filter data for the current cluster
       cluster_data <- all_differences %>% 
         filter(Cluster == cluster)
+          # Calculate summary data mean/median of ap_isi for this cluster and bursts
+    cl_ap_isi_md <- median(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_me <- mean(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_sd <- sd(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_iqr <- IQR(cluster_data$ap_isi, na.rm = TRUE)
+    cl_isi_count <- nrow(cluster_data)
+multicount <- cluster_data %>%
+  group_by(Cluster, `Burst Number`) %>%
+  mutate(pair_count = n()) %>%
+  ungroup() %>%
+  mutate(
+    n_2fire    = as.integer(pair_count == 1),
+    n_3fire    = as.integer(pair_count == 2),
+    n_4fire    = as.integer(pair_count == 3),
+    `n_5+fire` = as.integer(pair_count >= 4)
+  ) %>%
+  select(-pair_count)
+
+    n_2fire    <- sum(multicount$n_2fire)
+    n_3fire    <- sum(multicount$n_3fire)
+    n_4fire    <- sum(multicount$n_4fire)
+    `n_5+fire` <- sum(multicount$`n_5+fire`)
+      
+    output_data <- data.frame(file.id,cluster,cl_isi_count,cl_ap_isi_me,cl_ap_isi_sd,cl_ap_isi_md,cl_ap_isi_iqr,n_2fire,n_3fire,n_4fire,`n_5+fire`)
       
       # Generate the plot for the current cluster
       p <- ggplot(cluster_data, aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))) +
@@ -153,10 +177,13 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
         # Add jittered points to show individual values
         geom_point(position = position_jitter(width = 0, height = 0.1), aes(y = 0), size = 2) +
         # Vertical red dashed line for mean_ap_isi
-        geom_vline(xintercept = mean_ap_isi, linetype = "dashed", color = "red") +
+        geom_vline(xintercept = cl_ap_isi_md, linetype = "dashed", color = "red") +
+        geom_vline(xintercept = cl_ap_isi_me, linetype = "solid", color = "blue") +
         xlim(0, max_isi) +  # Set x-axis limits
         labs(title = paste("Cluster", cluster)) +
-        theme_minimal() +
+        theme_classic2() +
+        annotate("text", x=cl_ap_isi_md,y=3,label=paste("median",round(cl_ap_isi_md,2)))+
+        annotate("text", x=cl_ap_isi_me,y=1,label=paste("mean",round(cl_ap_isi_me,2)))+
         theme(
           axis.title.x = element_blank(),  # Remove x-axis title
           axis.title.y = element_blank(),  # Remove y-axis title
@@ -166,10 +193,20 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       
       # Add plot to the list
       plots_list[[cluster]] <- p
+      data_list[[cluster]] <- output_data
     }
     
-    # Combine all plots into one vertical column using gridExtra
-    combined_plot <- do.call(grid.arrange, c(plots_list, ncol = 1))
-    
+    # Create a text grob with the file ID
+file_label <- textGrob(paste("File ID:", file.id), 
+                       gp = gpar(fontsize = 10))
+
+# Combine all plots + label into one vertical column
+combined_plot <- do.call(grid.arrange, c(plots_list, list(file_label), ncol = 1))
+
+    #dataframe for export
+    isi_output <- bind_rows(data_list)
+
+    ggsave(paste(file.id,"isi_plot.png"),plot=combined_plot, width = 6, height = (length(plots_list)*1.5),)
+    write.csv(isi_output,paste(file.id,"isi_summary.csv"))
   }
 }
