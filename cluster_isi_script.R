@@ -91,7 +91,8 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
     }
     
     colnames(all_ap)[colnames(all_ap) %in% c("AP Location (s)", "AP Location from the begining of the Section (s)")] <- "ap_loc_sec"
-    
+        colnames(all_ap)[colnames(all_ap) %in% c("AP Location within burst (s)")] <- "ap_loc_sec_inburst"
+
     ## CLUSTER SEPARATOR
     # Factor the clusters
     all_ap <- all_ap %>%
@@ -123,9 +124,21 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
         filter(!is.na(ap_isi)) %>%
         select(`Burst Number`, `Cluster Number`, ap_isi)
     }
-    
+        # Function to calculate differences and store relevant information from burst times
+    calculate_diff_info_burst <- function(df) {
+      df %>%
+        # Group by 'Burst Number' and 'Cluster Number' to ensure calculations happen within these groups
+        group_by(`Burst Number`, `Cluster Number`) %>%
+        # Sort within each group by 'ap_loc_sec' to ensure time is in the correct order
+        arrange(ap_loc_sec_inburst) %>%
+        # Calculate the difference between adjacent values of 'ap_loc_sec'
+        mutate(ap_isi = ap_loc_sec_inburst - lag(ap_loc_sec_inburst)) %>%
+        # Remove NA values that arise from the lag function
+        filter(!is.na(ap_isi)) %>%
+        select(`Burst Number`, `Cluster Number`, ap_isi)
+    }
     # Apply the function to each dataframe in the list
-    cluster_differences <- lapply(split_clusters, calculate_diff_info)
+    cluster_differences <- lapply(split_clusters, calculate_diff_info_burst)
     
     # Combine all differences into a single data frame
     all_differences <- bind_rows(cluster_differences, .id = "Cluster")
