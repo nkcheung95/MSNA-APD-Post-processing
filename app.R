@@ -10,7 +10,8 @@ ui <- fluidPage(
   # Centered button layout
   fluidRow(
     column(12, align = "center",
-           actionButton("setwd_btn", "Set Working Directory", width = '300px', style = "font-size: 20px; margin: 20px;"),
+           actionButton("setwd_btn", "Set Output Directory", width = '300px', style = "font-size: 20px; margin: 20px;"),
+           actionButton("selfil_btn", "Select APD output files", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("dbscan_btn", "Run DBSCAN Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("isi_btn", "Run ISI Cluster Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("arrhythmia_btn", "Run Arrhythmia Analysis", width = '300px', style = "font-size: 20px; margin: 20px;")
@@ -97,6 +98,24 @@ server <- function(input, output, session) {
 
     busy(FALSE)
   })
+
+  observeEvent(input$selfil_btn, {
+    busy(TRUE)
+    status(NULL)
+    output$loading_text <- renderText({ "Select files..." })
+    
+    # Simulate a script run with a delay
+    later::later(function() {
+      # Try to source the DBSCAN Analysis script
+      tryCatch({
+        source("https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/file_loader.R?raw=TRUE")
+        status("Files loaded!")
+      }, error = function(e) {
+        status(paste("Error during file selection:", e$message))
+      })
+      busy(FALSE)
+    }, delay = 2)  # Adjust delay as needed
+  })  
   
   observeEvent(input$dbscan_btn, {
     busy(TRUE)
