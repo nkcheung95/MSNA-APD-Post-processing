@@ -44,7 +44,6 @@ select_files <- function() {
 # Call the function to get the file paths
 raw_files <- select_files()
 
-# ... [Your package loading and folder creation code remains the same] ...
 
 # Initialize an empty list to store all data
 all_data <- list()
