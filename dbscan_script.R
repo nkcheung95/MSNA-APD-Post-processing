@@ -1,75 +1,21 @@
-#DBSCAN
-###LIBLOAD
-
-# Define the packages you want to use
-packages <- c(
-  "dbscan", "cluster", "ggsci", "grid", "gridExtra", 
-  "purrr", "readxl", "ggpubr", "rstatix",
-  "stringr", "magick", "fs", "patchwork", "factoextra",
-  "reshape","reshape2", "tidyverse","forcats","FNN","tcltk"
-)
-
-# Function to install and load packages
-install_load_packages <- function(packages) {
-  # Check which packages are not installed
-  not_installed <- setdiff(packages, rownames(installed.packages()))
+for (file.id in names(all_data)) {
   
-  # Install the missing packages
-  if (length(not_installed) > 0) {
-    install.packages(not_installed)
-  }
+  message("Analyzing: ", file.id)
   
-  # Load all the packages
-  invisible(sapply(packages, library, character.only = TRUE))
-}
-
-# Call the function to install and load packages
-install_load_packages(packages)
-wd <- getwd()
-analyzed_folder <- "analyzed_data"
-
-if (file.exists(analyzed_folder)) {
+  # Pull the specific sheets for THIS file into local variables 
+  # so your existing analysis code doesn't need to be rewritten!
+  summ_sheet      <- all_data[[file.id]]$summ
+  burst_sheet     <- all_data[[file.id]]$burst
+  ap_sheet        <- all_data[[file.id]]$ap
+  ap_shapes_sheet <- all_data[[file.id]]$ap_shapes
+  clusters_sheet  <- all_data[[file.id]]$clusters
+  rri_sheet       <- all_data[[file.id]]$rri
   
-  cat("The folder already exists")
-  
-} else {
-  
-  dir.create(analyzed_folder)
-  
-}
-# Function to select multiple files using tcltk
-select_files <- function() {
-  tk_choose.files(multi = TRUE, filters = matrix(c("Excel Files", "*.xls"), ncol = 2))
-}
-
-# Call the function to get the file paths
-raw_files <- select_files()
-
-# Check if raw_files is not NULL and not empty
-if (!is.null(raw_files) && length(raw_files) > 0) {
-  # Iterate over the files and process them
-  for (raw_file in raw_files) {
-    file.id <- sub("\\.xls$", "", basename(raw_file))
-    file.id <- sub("raw_data/", "", file.id)
-    
-    # Create a folder with the file.id name inside the analyzed folder
-
-    file_id_folder <- file.path(analyzed_folder, file.id)
-    dir.create(file_id_folder, recursive = TRUE)
-    
-    # Create a "plots" folder inside the file.id folder
-    plots_folder <- file.path(file_id_folder, "plots")
-    dir.create(plots_folder)
-    
-    print(file.id)
-  
-  
-  summ_sheet<-read_xls(file.path(raw_file),sheet=1)
-  burst_sheet<-read_xls(file.path(raw_file),sheet=2)
-  ap_sheet<-read_xls(file.path(raw_file),sheet=3)
-  ap_shapes_sheet<-read_xls(file.path(raw_file),sheet=4)
-  clusters_sheet<-read_xls(file.path(raw_file),sheet=5)
-  rri_sheet<-read_xls(file.path(raw_file),sheet=6)
+  # --- Setup Folders ---
+  file_id_folder <- file.path(analyzed_folder, file.id)
+  if (!dir.exists(file_id_folder)) dir.create(file_id_folder, recursive = TRUE)
+  plots_folder <- file.path(file_id_folder, "plots")
+  if (!dir.exists(plots_folder)) dir.create(plots_folder)
   
   ##CLUSTER AP VISUAL PLOT
   colnames(ap_shapes_sheet) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
@@ -702,7 +648,13 @@ normalize_clusters <- function(clusters_desc, normal,normal_min) {
 binned_clusters <- normalize_clusters(clusters_desc, normal_max,normal_min)
 write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
 
+# Final saving step
+  write.csv(dbprob_data, file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
+  
+  message("Done with: ", file.id)
+}
 
+print("ALL FILES ANALYZED")
 
 #####SAVE R FILE FOR FUTURE USE
   # Save the R session inside the folder
@@ -711,5 +663,5 @@ write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_
   
   saveRDS(environment(), file.path(file_id_folder, paste0(file.id, "_environment.RDS")))
   
-}}
+
 print("DBSCAN ANALYZED")
