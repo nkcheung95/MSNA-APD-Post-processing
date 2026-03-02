@@ -650,18 +650,15 @@ write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_
 
 # Final saving step
   write.csv(dbprob_data, file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
-  
-  message("Done with: ", file.id)
-}
-
-print("ALL FILES ANALYZED")
-
-#####SAVE R FILE FOR FUTURE USE
+  #####SAVE R FILE FOR FUTURE USE
   # Save the R session inside the folder
   save.image(file.path(file_id_folder, paste0(file.id, "_session.RData")))
   #save and clean environment for new session
   
   saveRDS(environment(), file.path(file_id_folder, paste0(file.id, "_environment.RDS")))
   
+  message("DBSCAN analyzed for: ", file.id)
+}
 
-print("DBSCAN ANALYZED")
+print("ALL FILES ANALYZED")
+
