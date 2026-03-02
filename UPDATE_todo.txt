@@ -1,0 +1,4 @@
+1. Add normalize function earlier in DBSCAN
+2. Cluster ISI needs to normalize and use DBSCAN
+3. File load as dashboard button - batch?
+4. Integrated ISI and DBSCAN as 1 functional program
