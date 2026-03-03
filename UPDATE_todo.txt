@@ -1,4 +1,2 @@
-Add normalize function earlier in DBSCAN
-Cluster ISI needs to normalize and use DBSCAN
-Integrated ISI and DBSCAN as 1 functional program
-ISI per multiburst fire count (2,3,4,5+)
+Shiny select for output and Files
+Add merger/condition analysis functions (new script?)
