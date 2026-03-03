@@ -1,664 +1,903 @@
-for (file.id in names(all_data)) {
+###DBSCAN###
+###LIBRARIES###
+#loaded via github loading call
+#--------------------------------------------------FUNCTIONS-------
+# prep_apd_data---------------------------------------------------------
+# Cluster split
+# Fn: Prepare data and split into cluster list
+# Exec: cluster_list <- prep_apd_data(ap_sheet, ap_shapes_sheet)
+# ---------------------------------------------------------
+prep_apd_data <- function(ap_sheet, ap_shapes_sheet) {
   
-  message("Analyzing: ", file.id)
+  # 1. Rename ap_shapes_sheet columns to match original (required for all downstream shape indexing)
+  colnames(ap_shapes_sheet) <- c("Burst Number", "AP Number", 1:32)
   
-  # Pull the specific sheets for THIS file into local variables 
-  # so your existing analysis code doesn't need to be rewritten!
-  summ_sheet      <- all_data[[file.id]]$summ
-  burst_sheet     <- all_data[[file.id]]$burst
-  ap_sheet        <- all_data[[file.id]]$ap
-  ap_shapes_sheet <- all_data[[file.id]]$ap_shapes
-  clusters_sheet  <- all_data[[file.id]]$clusters
-  rri_sheet       <- all_data[[file.id]]$rri
+  # 2. Create unique ID and merge
+  ap_sheet$ap_id        <- ap_sheet$`Burst Number` + (ap_sheet$`AP Number` * 0.01)
+  ap_shapes_sheet$ap_id <- ap_shapes_sheet$`Burst Number` + (ap_shapes_sheet$`AP Number` * 0.01)
   
-  # --- Setup Folders ---
-  file_id_folder <- file.path(analyzed_folder, file.id)
-  if (!dir.exists(file_id_folder)) dir.create(file_id_folder, recursive = TRUE)
-  plots_folder <- file.path(file_id_folder, "plots")
-  if (!dir.exists(plots_folder)) dir.create(plots_folder)
-  
-  ##CLUSTER AP VISUAL PLOT
-  colnames(ap_shapes_sheet) <- c("Burst Number","AP Number",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32)
-  clusterfigdata <- ap_shapes_sheet[-c(1,2)]
-  clusterfigdata <- t(clusterfigdata)
-  aptime <- (1:nrow(clusterfigdata))
-  clusterfigdata <- cbind.data.frame(aptime,clusterfigdata)
-  clusterfigdata_melt <- melt(clusterfigdata,id=c(aptime))
-  clusterfigdata_melt <- clusterfigdata_melt[-c(2:32)]
-  ap_visual <- ggplot(clusterfigdata_melt,aes(aptime,value))+
-    geom_smooth()+
-    theme_classic()+
-    ggtitle("SMOOTHED AP")
-  ap_visual
-  
-  #AP Identifier
-  ap_sheet$ap_id <- ap_sheet$`Burst Number`+(ap_sheet$`AP Number`*0.01)
-  ap_shapes_sheet$ap_id <- ap_shapes_sheet$`Burst Number`+(ap_shapes_sheet$`AP Number`*0.01)
-  all_ap <- merge(ap_sheet,ap_shapes_sheet)
-  all_ap <- drop_na(all_ap)
-  ##CLUSTER SEPARATOR
-  ###BASELINE
-  #Factor the clusters
-  all_ap <- all_ap %>%
-    arrange(all_ap$'Cluster Number')
+  all_ap <- merge(ap_sheet, ap_shapes_sheet) |> tidyr::drop_na()
+  all_ap <- all_ap %>% arrange(all_ap$`Cluster Number`)
   all_ap$`Cluster Number` <- as.factor(all_ap$`Cluster Number`)
-  # Get unique values from the cluster column
-  cluster_values <- unique(all_ap$`Cluster Number`)
   
-  # Create a list to store the new dataframes
-  split_clusters <- list()
+  # 3. Return split list (preserves factor levels, matching original behaviour)
+  return(split(all_ap, all_ap$`Cluster Number`))
+}
+
+# normalize_neurons_full---------------------------------------------------------
+# Full Neuron Normalizer (Dual Output Version)
+# Fn: Normalizes every AP relative to reference 'Normal' range & saves states
+# Exec: norm_bundle <- normalize_neurons_full(neurons_df, clusters_sheet, plots_folder, file.id)
+# ---------------------------------------------------------
+normalize_neurons_full <- function(neurons_df, clusters_sheet, save_path, file_id) {
   
-  # Loop through unique values and create a dataframe for each value
-  for (value in cluster_values) {
-    subset_df <- all_ap[all_ap$`Cluster Number` == value, ]
-    split_clusters[[value]] <- subset_df
+  # 1. Extraction Logic
+  extract_numbers <- function(text) {
+    numbers <- stringr::str_extract_all(text, "\\d+\\.\\d+")[[1]]
+    return(as.numeric(numbers))
   }
-  ###AP PLOT PER CLUSTER
-  clusterplotlist <- list()
-  for (i in seq_along(split_clusters)) {
-    df <- split_clusters[[i]]
+  
+  n <- ncol(clusters_sheet)
+  
+  # Reference Bounds
+  ref_amp_min <- extract_numbers(clusters_sheet[5, 1])[1]
+  ref_amp_max <- extract_numbers(clusters_sheet[5, n])[2]
+
+# 2. Apply Normalization
+  neurons_df_norm <- neurons_df %>%
+    mutate(
+      norm_amp_percent = ((ap_amp - ref_amp_min) / (ref_amp_max - ref_amp_min)) * 100
+    )
+
+  # Cap 0-100
+  neurons_df_norm$norm_amp_percent <- pmax(0, pmin(100, neurons_df_norm$norm_amp_percent))
+
+  # 3. Bin into 10% intervals
+  neurons_df_norm$amp_percentile_bin <- cut(
+    neurons_df_norm$norm_amp_percent,
+    breaks         = seq(0, 100, by = 10),
+    include.lowest = TRUE,
+    labels         = paste0(seq(0, 90, by = 10), "-", seq(10, 100, by = 10), "%")
+  )
+  return(list(raw = neurons_df, normalized = neurons_df_norm))
+}
+
+# generate_smoothed_ap---------------------------------------------------------
+# AP Smoother
+# Fn: Generate smoothed AP figure
+# Exec: ap_visual <- generate_smoothed_ap(ap_shapes_sheet)
+# NOTE: ap_shapes_sheet must already have columns renamed (done inside prep_apd_data)
+# ---------------------------------------------------------
+generate_smoothed_ap <- function(ap_shapes_sheet) {
+  
+  # Rename in case called independently; safe to call again as names are already set by prep_apd_data
+  colnames(ap_shapes_sheet) <- c("Burst Number", "AP Number", 1:32)
+  
+  clusterfigdata <- t(ap_shapes_sheet[-c(1, 2)])
+  aptime <- 1:nrow(clusterfigdata)
+  clusterfigdata <- cbind.data.frame(aptime, clusterfigdata)
+  
+  clusterfigdata_melt <- reshape2::melt(clusterfigdata, id = c("aptime"))
+  # Drop the 'variable' column (factor of AP indices) — keep only aptime + value for geom_smooth
+  clusterfigdata_melt <- clusterfigdata_melt[, c("aptime", "value")]
+  
+  ap_visual <- ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
+    ggplot2::geom_smooth() +
+    ggplot2::theme_classic() +
+    ggplot2::ggtitle("SMOOTHED AP")
+  
+  return(ap_visual)
+}
+
+# visualize_apd_clusters ---------------------------------------------------------
+# Cluster plotter
+# Fn: Generate and save the composite cluster plot
+# Exec: shape_plots <- visualize_apd_clusters(cluster_list, main_vis, clusters_sheet, plots_folder)
+# ---------------------------------------------------------
+visualize_apd_clusters <- function(cluster_list, main_ap_vis, clusters_sheet, save_path) {
+  
+  # 1. Setup Y limits — matches original: max of row 2 / 2
+  clusters_sheet_row2 <- c(clusters_sheet[2, ])
+  numeric_vector <- as.numeric(clusters_sheet_row2)
+  max_y <- max(numeric_vector, na.rm = TRUE) / 2
+  
+  # 2. Map plotting logic over every cluster
+  cluster_plots <- lapply(seq_along(cluster_list), function(i) {
+    df <- cluster_list[[i]]
     
-    #MELT TIME
-    clusters_sheet_row2 <- c(clusters_sheet[2,])
-    numeric_vector <- as.numeric(clusters_sheet_row2)
-    max_y <- max(numeric_vector, na.rm = TRUE)
-    max_y <- max_y/2
-    df <- df[-c(1,2,4:9,11)]
-    df_t <- t(df[3:34])
-    df_t <- as.data.frame(t(df[3:34]))
-    df_t$Average <- rowMeans(df_t)
+    # Isolate the 32 shape columns by name (columns named 1:32, as set during prep_apd_data)
+    shape_cols <- as.character(1:32)
+    df_t <- as.data.frame(t(df[, shape_cols]))
+    df_t[] <- lapply(df_t, as.numeric)
+    df_t$Average <- rowMeans(df_t, na.rm = TRUE)
+    
     df_aptime <- list(1:32)
-    df_plot <- cbind.data.frame(df_aptime,df_t)
+    df_plot <- cbind.data.frame(df_aptime, df_t)
     names(df_plot)[1] <- "ap_time"
-    df_plot <- melt(df_plot,id=c("ap_time"))
-    df_plotmean <- df_plot %>% filter(variable == 'Average')
-    clusterplotlist[[i]] <- ggplot(df_plotmean,aes(ap_time,value,fill=ap_time))+
-      geom_line()+
-      ggtitle(paste("cluster", levels(df$`Cluster Number`)[i]))+
-      ylim(-max_y,max_y)+
-      ylab("")+
-      xlab("")+
-      guides(fill = "none")+
-      theme_classic()+
-      theme(axis.text.x = element_blank(),
-            axis.text.y = element_blank(),
-            axis.ticks.x = element_blank(),
-            axis.ticks.y = element_blank())
+    df_plot <- reshape2::melt(df_plot, id = c("ap_time"))
+    df_plotmean <- df_plot %>% dplyr::filter(variable == "Average")
     
-  }
-  clustervis <- grid.arrange(grobs = clusterplotlist, ncol = 4)
-  apshape_full <- grid.arrange(ap_visual,clustervis,ncol=2)
-  ggsave("ap_plot.png", apshape_full, path = plots_folder,width = 15, height = 15)
+    ggplot2::ggplot(df_plotmean, ggplot2::aes(ap_time, value, fill = ap_time)) +
+      ggplot2::geom_line() +
+      ggplot2::ggtitle(paste("cluster", levels(df$`Cluster Number`)[i])) +
+      ggplot2::ylim(-max_y, max_y) +
+      ggplot2::ylab("") +
+      ggplot2::xlab("") +
+      ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic() +
+      ggplot2::theme(
+        axis.text.x  = ggplot2::element_blank(),
+        axis.text.y  = ggplot2::element_blank(),
+        axis.ticks.x = ggplot2::element_blank(),
+        axis.ticks.y = ggplot2::element_blank()
+      )
+  })
   
-  ###Firing probability
+  # 3. Assemble and Save — matches original apshape_full layout
+  clustervis   <- gridExtra::grid.arrange(grobs = cluster_plots, ncol = 4)
+  apshape_full <- gridExtra::grid.arrange(main_ap_vis, clustervis, ncol = 2)
+  ggplot2::ggsave("ap_plot.png", apshape_full, path = save_path, width = 15, height = 15)
+  
+  return(cluster_plots)
+}
+
+# analyze_firing_probabilities---------------------------------------------------------
+# Firing & Multi-fire Analyzer
+# Fn: Calculates cluster engagement stats and multi-firing distribution
+# Exec: prob_results <- analyze_firing_probabilities(cluster_list, rri_sheet, burst_sheet, plots_folder)
+# Returns: list(data, prob_plots, beats_prob_list, multi_plots)
+# ---------------------------------------------------------
+analyze_firing_probabilities <- function(cluster_list, rri_sheet, burst_sheet, save_path) {
+  
+  # 1. Setup Baselines
   beats_total <- nrow(rri_sheet)
-  burst_total <- max(burst_sheet$`Burst Number`)
-  total_time <- as.numeric(max(summ_sheet$`Data Duration (s)`))
-  #cluster cleaner
-  cluster_prob_list <- list() 
-  beats_prob_list <- list()
-  timeline_list <- list()
+  burst_total <- max(burst_sheet$`Burst Number`, na.rm = TRUE)
   
-  for (i in seq_along(split_clusters)) {
-    cluster <- as.data.frame(split_clusters[[i]])
-    cluster <- cluster[-c(12:44)]
+  cluster_prob_list <- list()   # per-burst probability plots  (original: cluster_prob_list)
+  beats_prob_list   <- list()   # per-beat  probability plots  (original: beats_prob_list)
+  multifire_list    <- list()
+  stat_summary      <- list()
+  
+  # 2. Process each cluster
+  for (i in seq_along(cluster_list)) {
+    cluster     <- as.data.frame(cluster_list[[i]])
+    cluster     <- cluster[-c(12:44)]
     names(cluster)[8] <- "ap_loc_sec"
-    unique_bursts <- length(unique(cluster$`Burst Number`))
-    beats_prob <- unique_bursts/beats_total*100
-    offbeats_prob <- (beats_total-unique_bursts)/beats_total*100
-    cluster_prob <- unique_bursts/burst_total*100
-    off_prob <- (burst_total-unique_bursts)/burst_total*100
-    beats_df <- cbind.data.frame(offbeats_prob,beats_prob)
-    beats_df_melt <- melt(beats_df)
-    prob_df <- cbind.data.frame(off_prob,cluster_prob)
-    prob_df_melt <- melt(prob_df)
-    cluster_prob_list[[i]] <- ggplot(prob_df_melt,aes(variable,value,fill=variable))+
-      geom_col()+
-      ggtitle(paste("cluster", levels(cluster$`Cluster Number`)[i]))+
-      ylim(0,100)+
-      ylab("Probability")+
-      xlab("")+
-      scale_fill_jco()+
-      guides(fill = "none")+
-      theme_classic()
+    cluster_num <- levels(cluster$`Cluster Number`)[i]
     
+    # --- Firing Probabilities ---
+    unique_bursts  <- length(unique(cluster$`Burst Number`))
+    beats_prob     <- unique_bursts / beats_total * 100
+    offbeats_prob  <- (beats_total - unique_bursts) / beats_total * 100
+    cluster_prob   <- unique_bursts / burst_total * 100
+    off_prob       <- (burst_total - unique_bursts) / burst_total * 100
     
-    beats_prob_list[[i]] <- ggplot(beats_df_melt,aes(variable,value,fill=variable))+
-      geom_col()+
-      ggtitle(paste("cluster", levels(cluster$`Cluster Number`)[i]))+
-      ylim(0,100)+
-      ylab("Probability")+
-      xlab("")+
-      scale_fill_jco()+
-      guides(fill = "none")+
-      theme_classic()
+    beats_df      <- cbind.data.frame(offbeats_prob, beats_prob)
+    beats_df_melt <- reshape2::melt(beats_df, id.vars = character(0))
+    prob_df       <- cbind.data.frame(off_prob, cluster_prob)
+    prob_df_melt  <- reshape2::melt(prob_df,  id.vars = character(0))
     
+    # Burst probability plot (original: cluster_prob_list)
+    cluster_prob_list[[i]] <- ggplot2::ggplot(prob_df_melt, ggplot2::aes(variable, value, fill = variable)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", cluster_num)) +
+      ggplot2::ylim(0, 100) +
+      ggplot2::ylab("Probability") +
+      ggplot2::xlab("") +
+      ggsci::scale_fill_jco() +
+      ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
     
+    # Beat probability plot (original: beats_prob_list)
+    beats_prob_list[[i]] <- ggplot2::ggplot(beats_df_melt, ggplot2::aes(variable, value, fill = variable)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", cluster_num)) +
+      ggplot2::ylim(0, 100) +
+      ggplot2::ylab("Probability") +
+      ggplot2::xlab("") +
+      ggsci::scale_fill_jco() +
+      ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
     
+    # --- Multi-firing Logic ---
+    cluster_counts <- table(cluster$`Burst Number`)
+    summary_table  <- table(factor(cluster_counts, levels = 1:6, labels = c("1","2","3","4","5","6+")))
+    multifire_df   <- as.data.frame(summary_table)
+    colnames(multifire_df) <- c("Multiple_firings", "Frequency")
+    freq_total     <- sum(multifire_df$Frequency)
+    multifire_df$Probability <- multifire_df$Frequency / freq_total * 100
+    
+    multifire_list[[i]] <- ggplot2::ggplot(multifire_df, ggplot2::aes(Multiple_firings, Probability, fill = Multiple_firings)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", cluster_num)) +
+      ggplot2::ylim(0, 100) +
+      ggsci::scale_fill_jco() +
+      ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
+    
+    # --- Store Statistics for CSV ---
+    stat_summary[[i]] <- data.frame(
+      cluster     = cluster_num,
+      beats_prob  = beats_prob,
+      bursts_prob = cluster_prob,
+      t(setNames(multifire_df$Frequency,    paste0("freq_",  multifire_df$Multiple_firings))),
+      t(setNames(multifire_df$Probability,  paste0("prob_",  multifire_df$Multiple_firings)))
+    )
   }
   
-  cluster_prob <- grid.arrange(grobs = cluster_prob_list, ncol = 4)
-  cluster_title <- textGrob("clusters", gp = gpar(fontsize = 16, fontface = "bold"))
-  cluster_prob <- arrangeGrob(cluster_prob, top = cluster_title)
+  # 3. Assemble and Save Grids
+  cluster_prob_grid <- gridExtra::arrangeGrob(
+    grobs = cluster_prob_list, ncol = 4,
+    top   = grid::textGrob("clusters", gp = grid::gpar(fontsize = 16, fontface = "bold"))
+  )
+  multifire_grid <- gridExtra::grid.arrange(grobs = multifire_list, ncol = 4)
   
-  ggsave("cluster_prob.png",cluster_prob,path = plots_folder,width=15,height=15)
+  ggplot2::ggsave("cluster_prob.png",   cluster_prob_grid, path = save_path, width = 15, height = 15)
+  ggplot2::ggsave("multifire_prob.png", multifire_grid,    path = save_path, width = 15, height = 15)
   
-  # Extract and reshape data from all plots
+  # 4. Build combined prob_data CSV exactly as original (beats + bursts + multifire merged)
   beats_data <- beats_prob_list %>%
     imap_dfr(~ {
-      .x$data %>% 
-        mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+      .x$data %>%
+        mutate(cluster = .y) %>%
         select(cluster, variable, value)
     }) %>%
-    pivot_wider(
-      names_from = variable, 
-      values_from = value,
-      names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
-    ) %>%
-    rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
+    pivot_wider(names_from = variable, values_from = value, names_glue = "{variable}_prob") %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))
   
   bursts_data <- cluster_prob_list %>%
     imap_dfr(~ {
-      .x$data %>% 
-        mutate(cluster = .y) %>%  # .y is the list index (cluster number)
+      .x$data %>%
+        mutate(cluster = .y) %>%
         select(cluster, variable, value)
     }) %>%
-    pivot_wider(
-      names_from = variable, 
-      values_from = value,
-      names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
-    ) %>%
-    rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
-
-  prob_data <- merge(beats_data,bursts_data,by = "cluster")
+    pivot_wider(names_from = variable, values_from = value, names_glue = "{variable}_prob") %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))
   
+  prob_data <- merge(beats_data, bursts_data, by = "cluster")
   
-  ###MULTIFIRE
-  multifire_list<- list()
-  for (i in seq_along(split_clusters)) {
-    cluster <- as.data.frame(split_clusters[[i]])
-    cluster <- cluster[-c(12:44)]
-    # Count the occurrences of each numeric value
-    cluster_counts <- table(cluster$`Burst Number`)
-    
-    # Create a summary table
-    summary_table <- table(factor(cluster_counts, levels = 1:6, labels = c("1", "2", "3", "4", "5", "6+")))
-    # Convert the summary table to a data frame
-    multifire_df <- as.data.frame(summary_table)
-    
-    # Rename the columns
-    colnames(multifire_df) <- c("Multiple_firings", "Frequency")
-    freq_total <- sum(multifire_df$Frequency)
-    multifire_df$Probability <- multifire_df$Frequency/freq_total*100
-    
-    multifire_list[[i]] <- ggplot(multifire_df,aes(Multiple_firings,Probability,fill = Multiple_firings))+
-      geom_col()+
-      ggtitle(paste("cluster", levels(cluster$`Cluster Number`)[i]))+
-      ylim(0,100)+
-      scale_fill_jco()+
-      guides(fill="none")+
-      theme_classic()
-  }
-  # Step 1: Extract data from each ggplot and combine
   multifire_data <- multifire_list %>%
     imap_dfr(~ {
       .x$data %>%
-        mutate(cluster = .y) %>%  # .y = cluster number (list index)
+        mutate(cluster = .y) %>%
         select(cluster, Multiple_firings, Frequency, Probability)
     }) %>%
     pivot_wider(
-      names_from = Multiple_firings,
+      names_from  = Multiple_firings,
       values_from = c(Frequency, Probability),
-      names_glue = "{.value}_{Multiple_firings}"  # Format: "frequency_1", "probability_1", etc.
+      names_glue  = "{.value}_{Multiple_firings}"
     )
-  prob_data <- merge(prob_data,multifire_data,by="cluster")
   
-  # Step 2: Clean column names (optional, if needed)
-multifire_data <- multifire_data %>%
-    rename_with(~ gsub("frequency_", "freq_", .x))  # Rename "frequency_1" to "freq_1"
+  prob_data <- merge(prob_data, multifire_data, by = "cluster")
   
-  multifire_prob <- grid.arrange(grobs = multifire_list, ncol = 4)
+  # Save base probabilities CSV (original saves this as _probabilities.csv)
   
-  ggsave("multifire_prob.png",multifire_prob,path = plots_folder,width=15,height=15)
-  write.csv(prob_data,file.path(file_id_folder, paste0(file.id, "_probabilities.csv")))
+  # 5. Return all four lists so downstream functions can use them
+  return(list(
+    data             = do.call(rbind, stat_summary),
+    prob_plots       = cluster_prob_list,   # burst-level probability plots
+    beats_prob_list  = beats_prob_list,     # beat-level probability plots
+    multi_plots      = multifire_list,
+    prob_data        = prob_data
+  ))
+}
+
+# dbscan_isolate_neuron_data---------------------------------------------------------
+# Neuron Isolation Processor
+# Fn: Sub-clusters within shape groups and cleans neuron IDs
+# Exec: neurons_df <- isolate_neuron_data(cluster_list, eps=0.7, minPts=4)
+# ---------------------------------------------------------
+dbscan_isolate_neuron_data <- function(cluster_list, eps = 0.7, minPts = 4) {
   
+  processed_list <- list()
   
-  ###Cluster Latency/Amp
-  
-  # Initialize an empty list to store the cluster plots
-  cluster_lat_amp_list <- list()
-  
-  # Initialize an empty list to store scaled data
-  scaled_data_list <- list()
-  lat_amp_with_clusters_list <- list()
-  
-  for (i in seq_along(split_clusters)) {
-    lat_amp <- as.data.frame(split_clusters[[i]])
-    lat_amp <- lat_amp[c(1, 3, 5, 9)]
+  for (i in seq_along(cluster_list)) {
+    raw_df  <- as.data.frame(cluster_list[[i]])
+    # Select by position then rename — matches original lat_amp[c(1,3,5,9)] + colnames()
+    # Cols: 1=Burst Number, 3=ap_id, 5=AP Amplitude, 9=AP Latency (exact positions post-merge)
+    lat_amp <- raw_df[, c(1, 3, 5, 9)]
     colnames(lat_amp) <- c("burst_number", "ap_id", "ap_amp", "ap_latency")
     
-    # Perform scaling
-    scaled_data <- scale(as.matrix(lat_amp$ap_latency))
+    scaled_lat           <- scale(as.matrix(lat_amp$ap_latency))
+    scaled_lat[is.nan(scaled_lat)] <- 0
+    db_res               <- dbscan::dbscan(scaled_lat, eps = eps, minPts = minPts)
     
-    # Check for NaN values in scaled data
-    scaled_data[is.nan(scaled_data)] <- 0
+    n_id        <- db_res$cluster
+    n_id[n_id == 0] <- 1   # Recode noise (0) to cluster 1, matching original
+    lat_amp$neuron_id <- as.factor(n_id)
     
-    # Store scaled data in list
-    scaled_data_list[[i]] <- scaled_data
-    
-    # Perform DBSCAN clustering
-    eps <- 0.7  # Adjust the epsilon parameter as needed
-    minPts <- 4 # Adjust the minPts parameter as needed
-    dbscan_result <- dbscan(scaled_data_list[[i]], eps = eps, minPts = minPts)
-    
-    # Extract cluster assignments
-    cluster_assignments <- dbscan_result$cluster
-    
-    # Combine lat_amp and cluster_assignments
-    
-    lat_amp_with_clusters <- cbind(lat_amp, Cluster = factor(cluster_assignments))
-    names(lat_amp_with_clusters)[5] <- "neuron_id"
-    lat_amp_with_clusters_list[[i]] <- lat_amp_with_clusters
-    
-    # Plot the clusters
-    min_latency <- min(ap_sheet$`AP Latency (s)`,na.rm=TRUE)
-    max_latency <- max(ap_sheet$`AP Latency (s)`,na.rm=TRUE)
-    cols <- c("0" = "#868686FF", "1" = "#0073C2FF", "2" = "#EFC000FF", "3" = "#CD534CFF")
-    cluster_lat_amp_list[[i]] <-  ggplot(lat_amp_with_clusters, aes(x = ap_latency, y = ap_amp, color = neuron_id)) +
-      geom_point() +
-      geom_density(inherit.aes=FALSE,data=lat_amp_with_clusters,aes(ap_latency),adjust=0.5,alpha = 0.5)+
-      labs(x = "Latency",
-           y = "Amplitude",
-           color = "DBSCAN") +
-      xlim(min_latency,max_latency)+
-      ggtitle(paste("cluster", levels(cluster$`Cluster Number`)[i]))+
-      scale_color_manual(values=cols)+
-      theme_classic()
-    
-  }
-  lat_amp_summary <- grid.arrange(grobs=cluster_lat_amp_list,ncol=1)
-  
-  
-  ###PLOT COMBINE 
-  layout_matrix <- rbind(c(1, 2, 3, 3))
-  combined_grobs_list <- list()
-  
-  for (i in seq_along(clusterplotlist)) {
-    combined_plot <- grid.arrange(clusterplotlist[[i]], beats_prob_list[[i]],
-                                  cluster_prob_list[[i]], multifire_list[[i]], 
-                                  cluster_lat_amp_list[[i]], widths = c(1,1,1,2,2),ncol = 5)
-    combined_grobs_list <- c(combined_grobs_list, list(combined_plot))
+    processed_list[[i]] <- merge(raw_df, lat_amp[, c("ap_id", "neuron_id")], by = "ap_id")
   }
   
-  # Display the list of combined grobs
-  print(combined_grobs_list)
-  grid <- grid.arrange(grobs = combined_grobs_list,ncol=1)
-  cluster_summary <- arrangeGrob(grid, top = file.id)
-  gridheight <- (length(combined_grobs_list)*2)
-  lat_amp_summary <- arrangeGrob(lat_amp_summary, top=file.id)
-  ggsave("cluster_summary.png",cluster_summary,path = plots_folder,height = gridheight,width = 15,limitsize = FALSE)
-  ggsave("latency_amplitude.png",lat_amp_summary,path = plots_folder, height=gridheight,width=15,limitsize=FALSE)
-  all_lat_amp <- ap_sheet[c(4,8,9)]
-  all_lat_amp <- drop_na(all_lat_amp)
-  colnames(all_lat_amp) <- c("ap_amp","ap_latency","Cluster")
-  all_lat_amp$Cluster <- as.integer(all_lat_amp$Cluster)
-  all_lat_amp_plot <- ggplot(all_lat_amp,aes(ap_latency,ap_amp,color=Cluster))+
-    geom_point() +
-    labs(x = "Latency",
-         y = "Amplitude",
-         color = "Cluster") +
-    xlim(min_latency,max_latency)+
-    ggtitle("Amplitude/Latency")+
-    scale_color_continuous(type = "viridis")+
-    theme_classic()
-  ggsave("all_lat_amp_plot.png",all_lat_amp_plot,path=plots_folder,height=15,width=15)
-  #Neuron isolation
-  # Initialize an empty list to store the merged data frames
-  dbscan_split_clusters_list <- list()
-  
-  for (i in seq_along(split_clusters)) {
-    # Merge the i-th data frame in split_clusters with the i-th data frame in lat_amp_with_clusters_list
-    merged_data <- merge(split_clusters[[i]], lat_amp_with_clusters_list[[i]], by = "ap_id")
-    
-    # Store the merged data frame in the list
-    dbscan_split_clusters_list[[i]] <- merged_data
-  }
-  
-  # Iterate through the list of data frames
-  for (i in seq_along(dbscan_split_clusters_list)) {
-    # Convert 'neuron_id' column to character or numeric
-    dbscan_split_clusters_list[[i]]$neuron_id <- as.character(dbscan_split_clusters_list[[i]]$neuron_id)
-    # Change all 0 to 1 in the 'neuron_id' column for the i-th data frame
-    dbscan_split_clusters_list[[i]][dbscan_split_clusters_list[[i]]$neuron_id == "0", "neuron_id"] <- "1"
-    # If you need 'neuron_id' to be a factor again, you can convert it back
-    dbscan_split_clusters_list[[i]]$neuron_id <- as.factor(dbscan_split_clusters_list[[i]]$neuron_id)
-    #Cluster Timeline
-    dbcluster <- dbscan_split_clusters_list[[i]]
-    names(dbcluster)[8] <- "ap_loc_sec"
-    timeline_list[[i]] <- ggplot(dbcluster, aes(ap_loc_sec,'Cluster Number',color=neuron_id))+
-      geom_vline(xintercept = dbcluster$ap_loc_sec,color=dbcluster$neuron_id,linewidth=0.5)+
-      xlim(0,total_time)+
-      guides(fill = "none")+
-      scale_color_jco()+
-      theme_classic()+
-      theme(axis.ticks = element_blank(),axis.text = element_blank(),
-            panel.border = element_rect(color = "black", fill = NA))+
-      ylab(levels(cluster$`Cluster Number`)[i])+
-      xlab("")
-    
-  }
-  #timeline_plot <- grid.arrange(grobs=timeline_list,ncol=1)
-  #timelength <- length(combined_grobs_list)
-  #ggsave("cluster_timeline.png",timeline_plot,path=plots_folder,height=timelength,width=30)
-  #Amplitude sorted cluster plot
-  
-  
-  
-  
-  # Combine all data frames into one
-  neurons_df <- do.call(rbind, dbscan_split_clusters_list)
-  neurons_df$neuron_cluster_id <- paste(neurons_df$`Cluster Number`, as.character(neurons_df$neuron_id), sep = "_")
-  
-  
-  #BURST RRI CALC
-  burst_rri <- rri_sheet[c(1,6)]
-  burst_rri <- burst_rri %>% filter(`Burst numbers`!= 0)
-  names(burst_rri)[1] <- "Burst Number"
-  rri_neuron_df <- merge(neurons_df,burst_rri)
-  names(rri_neuron_df)[8] <- "ap_loc_sec"
-  burstsort_df <- rri_neuron_df[-c(12:43)]
-  sort_amp <- burst_sheet
-  sort_amp$sort <- order(sort_amp$`Burst Amp`)
-  burstsort_df <- merge(burstsort_df,sort_amp)
-  
-  #Factor the clusters
-  burstsort_df <- burstsort_df %>%
-    arrange(burstsort_df$'Cluster Number')
-  burstsort_df$`Cluster Number` <- as.factor(burstsort_df$`Cluster Number`)
-  # Get unique values from the cluster column
-  sort_cluster_values <- unique(burstsort_df$`Cluster Number`)
-  
-  # Create a list to store the new dataframes
-  sort_split_clusters <- list()
-  
-  # Loop through unique values and create a dataframe for each value
-  for (value in sort_cluster_values) {
-    subset_df <- burstsort_df[burstsort_df$`Cluster Number` == value, ]
-    sort_split_clusters[[value]] <- subset_df
-  }
-  
-  #####AP DBSCAN mean_latency summary
-  df_mean_ap_latency <- bind_rows(dbscan_split_clusters_list, .id = "cluster_name")
-locator_ap_latency <- df_mean_ap_latency %>%
-group_by(`Burst Number`,cluster_name, neuron_id) %>%  # Group by Cluster Number and neuron_id
-summarise(locator_ap_latency = mean(ap_latency, na.rm = TRUE),sd_ap_latency= sd(ap_latency, na.rm=T))  # Calculate the mean ap_latency
-write.csv(locator_ap_latency,file.path(file_id_folder, paste0(file.id, "LOCATOR_AP.csv")))
+  full_neurons_df <- do.call(rbind, processed_list)
 
+  # Rename by position — col 3=ap_id already named, col 5=AP Amplitude, col 8=AP Location, col 9=AP Latency
+  # These match the original ap_sheet column order used throughout the script
+  names(full_neurons_df)[5] <- "ap_amp"
+  names(full_neurons_df)[8] <- "ap_loc_sec"
+  names(full_neurons_df)[9] <- "ap_latency"
 
-mean_ap_latency <- df_mean_ap_latency  %>%
-  group_by(cluster_name) %>%
-  summarise(across(
-    c(ap_latency, ap_amp),
-    list(
-      median = ~median(., na.rm = TRUE),
-      iqr = ~IQR(., na.rm = TRUE),
-      q1 = ~quantile(., 0.25, na.rm = TRUE),
-      q3 = ~quantile(., 0.75, na.rm = TRUE)
+  full_neurons_df$neuron_cluster_id <- paste(
+    full_neurons_df$`Cluster Number`,
+    as.character(full_neurons_df$neuron_id),
+    sep = "_"
+  )
+  
+  return(full_neurons_df)
+}
+
+# sort_clusters_by_amplitude---------------------------------------------------------
+# Burst Intensity Sorter
+# Fn: Merges RRI and Burst metrics, then sorts data by Burst Amplitude
+# Exec: sorted_clusters <- sort_clusters_by_amplitude(neurons_df, rri_sheet, burst_sheet)
+# ---------------------------------------------------------
+sort_clusters_by_amplitude <- function(neurons_df, rri_sheet, burst_sheet) {
+  
+  # 1. Clean and Prepare RRI data
+  burst_rri <- rri_sheet[, c(1, 6)]
+  colnames(burst_rri) <- c("Burst Number", "RRI")
+  burst_rri <- dplyr::filter(burst_rri, `Burst Number` != 0)
+  
+  # 2. Merge RRI with the Neuron Data
+  enriched_df <- merge(neurons_df, burst_rri, by = "Burst Number")
+  
+  # 3. Remove shape vectors (cols 12:43)
+  enriched_df <- enriched_df[, -c(12:43)]
+  
+  # 4. Attach Burst Amplitude for sorting
+  sort_metrics <- burst_sheet[, c("Burst Number", "Burst Amp")]
+  enriched_df  <- merge(enriched_df, sort_metrics, by = "Burst Number")
+  
+  # 5. Sort by Cluster Number then Burst Amplitude
+  enriched_df <- enriched_df %>%
+    dplyr::arrange(`Cluster Number`, `Burst Amp`)
+  
+  # 6. Split into list by Cluster
+  sorted_cluster_list <- split(enriched_df, enriched_df$`Cluster Number`)
+  
+  return(sorted_cluster_list)
+}
+
+# summarize_ap_metrics---------------------------------------------------------
+# Latency & Amplitude Summarizer
+# Fn: Calculates burst-level means and cluster-level descriptive stats
+# Exec: ap_metrics <- summarize_ap_metrics(neurons_df, file_id_folder, file_id)
+# ---------------------------------------------------------
+summarize_ap_metrics <- function(neurons_df, folder_path, file_id) {
+  
+  # 1. Detailed Locator Data (Burst x Cluster x Neuron) — matches original LOCATOR_AP.csv
+  locator_ap_latency <- neurons_df %>%
+    dplyr::group_by(`Burst Number`, `Cluster Number`, neuron_id) %>%
+    dplyr::summarise(
+      locator_ap_latency = mean(ap_latency, na.rm = TRUE),
+      sd_ap_latency      = sd(ap_latency,   na.rm = TRUE),
+      .groups = "drop"
     )
-  ))
+  
 
-write.csv(mean_ap_latency,file.path(file_id_folder, paste0(file.id, "_apd_latency_summary.csv")))
+  
+  # 2. Population Summary (Median/IQR per Cluster) — matches original _apd_latency_summary.csv
+  mean_ap_latency_summary <- neurons_df %>%
+    dplyr::group_by(`Cluster Number`) %>%
+    dplyr::summarise(across(
+      c(ap_latency, ap_amp),
+      list(
+        median = ~median(., na.rm = TRUE),
+        iqr    = ~IQR(.,    na.rm = TRUE),
+        q1     = ~quantile(., 0.25, na.rm = TRUE),
+        q3     = ~quantile(., 0.75, na.rm = TRUE)
+      )
+    ))
+  
 
+  
+  return(list(locator = locator_ap_latency, summary = mean_ap_latency_summary))
+}
 
-#####SEPARATE DBSCAN CLUSTERS
-dbcluster_prob_list <- list()
-dbbeats_prob_list <- list()
+# split_list_by_neuron---------------------------------------------------------
+# Neuron Sub-Splitter
+# Fn: Splits cluster list into individual neurons (e.g., "1" and "1_2")
+# Exec: neuron_list <- split_list_by_neuron(dbscan_split_clusters_list)
+# ---------------------------------------------------------
 split_list_by_neuron <- function(original_list) {
-  # Initialize empty list for results
   result_list <- list()
   
-  # Process each element
-  walk(seq_along(original_list), function(i) {
+  purrr::walk(seq_along(original_list), function(i) {
     item <- original_list[[i]]
     
     if ("neuron_id" %in% names(item) && is.factor(item$neuron_id)) {
-      # Split into level 1 and level 2
-      level1 <- item %>% filter(neuron_id != 2)
-      level2 <- item %>% filter(neuron_id == 2)
-      
-      # Add level 1 to original position
+      level1 <- item %>% dplyr::filter(neuron_id != 2)
       result_list[[as.character(i)]] <<- level1
       
-      # Add level 2 to new position if it exists
+      level2 <- item %>% dplyr::filter(neuron_id == 2)
       if (nrow(level2) > 0) {
         result_list[[paste0(i, "_2")]] <<- level2
       }
     } else {
-      # Keep unchanged if no neuron_id or not factor
       result_list[[as.character(i)]] <<- item
     }
   })
-  
   return(result_list)
 }
 
-# Usage:
-dbprocessed_list <- split_list_by_neuron(dbscan_split_clusters_list)
-
-# Initialize your lists with the same names as dbprocessed_list
-dbcluster_prob_list <- vector("list", length(dbprocessed_list))
-names(dbcluster_prob_list) <- names(dbprocessed_list)
-
-dbbeats_prob_list <- vector("list", length(dbprocessed_list))
-names(dbbeats_prob_list) <- names(dbprocessed_list)
-
-for (i in seq_along(dbprocessed_list)) {
-  cluster <- as.data.frame(dbprocessed_list[[i]])
-  cluster <- cluster[-c(12:44)]
-  names(cluster)[8] <- "ap_loc_sec"
+# analyze_neuron_probabilities---------------------------------------------------------
+# DBSCAN Neuron Analyzer
+# Fn: Calculates probabilities and multi-fire stats for individual neurons
+# Exec: db_stats <- analyze_neuron_probabilities(neuron_list, beats_total, burst_total, file_id_folder, file_id)
+# ---------------------------------------------------------
+analyze_neuron_probabilities <- function(neuron_list, beats_total, burst_total, folder_path, file_id) {
   
-  unique_bursts <- length(unique(cluster$`Burst Number`))
-  beats_prob <- unique_bursts/beats_total*100
-  offbeats_prob <- (beats_total-unique_bursts)/beats_total*100
-  cluster_prob <- unique_bursts/burst_total*100
-  off_prob <- (burst_total-unique_bursts)/burst_total*100
+  dbcluster_prob_list <- vector("list", length(neuron_list))
+  names(dbcluster_prob_list) <- names(neuron_list)
+  dbbeats_prob_list <- vector("list", length(neuron_list))
+  names(dbbeats_prob_list) <- names(neuron_list)
+  dbmultifire_list <- vector("list", length(neuron_list))
+  names(dbmultifire_list) <- names(neuron_list)
   
-  beats_df <- cbind.data.frame(offbeats_prob, beats_prob)
-  beats_df_melt <- melt(beats_df)
-  prob_df <- cbind.data.frame(off_prob, cluster_prob)
-  prob_df_melt <- melt(prob_df)
-  
-  # Use the original name from dbprocessed_list for the title
-  original_name <- names(dbprocessed_list)[i]
-  
-  dbcluster_prob_list[[i]] <- ggplot(prob_df_melt, aes(variable, value, fill=variable)) +
-    geom_col() +
-    ggtitle(paste("cluster", original_name)) +  # Use original name here
-    ylim(0, 100) +
-    ylab("Probability") +
-    xlab("") +
-    scale_fill_jco() +
-    guides(fill = "none") +
-    theme_classic()
-  
-  dbbeats_prob_list[[i]] <- ggplot(beats_df_melt, aes(variable, value, fill=variable)) +
-    geom_col() +
-    ggtitle(paste("cluster", original_name)) +  # Use original name here
-    ylim(0, 100) +
-    ylab("Probability") +
-    xlab("") +
-    scale_fill_jco() +
-    guides(fill = "none") +
-    theme_classic()
-}
-# Extract and reshape data from all plots
-dbbeats_data <- dbbeats_prob_list %>%
-  imap_dfr(~ {
-    .x$data %>% 
-      mutate(cluster = .y) %>%  # .y is the list index (cluster number)
-      select(cluster, variable, value)
-  }) %>%
-  pivot_wider(
-    names_from = variable, 
-    values_from = value,
-    names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
-  ) %>%
-  rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
-
-dbbursts_data <- dbcluster_prob_list %>%
-  imap_dfr(~ {
-    .x$data %>% 
-      mutate(cluster = .y) %>%  # .y is the list index (cluster number)
-      select(cluster, variable, value)
-  }) %>%
-  pivot_wider(
-    names_from = variable, 
-    values_from = value,
-    names_glue = "{variable}_prob"  # Rename columns (e.g., "on" -> "on_prob")
-  ) %>%
-  rename_with(~ gsub("_prob_prob", "_prob", .x))  # Fix double "_prob" if needed
-
-dbprob_data <- merge(dbbeats_data,dbbursts_data,by = "cluster")
-
-# Initialize the list with names from list
-dbmultifire_list <- vector("list", length(dbprocessed_list))
-names(dbmultifire_list) <- names(dbprocessed_list)
-
-for (i in seq_along(dbprocessed_list)) {
-  cluster <- as.data.frame(dbprocessed_list[[i]])
-  cluster <- cluster[-c(12:44)]
-  
-  # Count the occurrences of each numeric value
-  cluster_counts <- table(cluster$`Burst Number`)
-  
-  # Create a summary table
-  summary_table <- table(factor(cluster_counts, levels = 1:6, labels = c("1", "2", "3", "4", "5", "6+")))
-  
-  # Convert the summary table to a data frame
-  dbmultifire_df <- as.data.frame(summary_table)
-  
-  # Rename the columns
-  colnames(dbmultifire_df) <- c("Multiple_firings", "Frequency")
-  freq_total <- sum(dbmultifire_df$Frequency)
-  dbmultifire_df$Probability <- dbmultifire_df$Frequency/freq_total*100
-  
-  # Get the original cluster name
-  original_name <- names(dbscan_split_clusters_list)[i]
-  
-  dbmultifire_list[[i]] <- ggplot(dbmultifire_df, aes(Multiple_firings, Probability, fill = Multiple_firings)) +
-    geom_col() +
-    ggtitle(paste("cluster", original_name)) +  # Use original name here
-    ylim(0, 100) +
-    scale_fill_jco() +
-    guides(fill = "none") +
-    theme_classic()
-}
-
-# Step 1: Extract data from each ggplot and combine
-dbmultifire_data <- dbmultifire_list %>%
-  imap_dfr(~ {
-    .x$data %>%
-      mutate(cluster = .y) %>%  # .y will now be the original name
-      select(cluster, Multiple_firings, Frequency, Probability)
-  }) %>%
-  pivot_wider(
-    names_from = Multiple_firings,
-    values_from = c(Frequency, Probability),
-    names_glue = "{.value}_{Multiple_firings}"
-  )
-
-dbprob_data <- merge(dbprob_data,dbmultifire_data,by="cluster")
-write.csv(dbprob_data,file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
-#####AP DBSCAN mean_latency summary
-df_dbmean_ap_latency <- bind_rows(dbprocessed_list, .id = "cluster_name")
-dbmean_ap_latency <- df_dbmean_ap_latency  %>%
-  group_by(cluster_name) %>%
-  summarise(across(
-    c(ap_latency, ap_amp),
-    list(
-      median = ~median(., na.rm = TRUE),
-      iqr = ~IQR(., na.rm = TRUE),
-      q1 = ~quantile(., 0.25, na.rm = TRUE),
-      q3 = ~quantile(., 0.75, na.rm = TRUE)
-    )
-  ))
-
- write.csv(dbmean_ap_latency,file.path(file_id_folder, paste0(file.id, "DBSCAN_apd_latency_summary.csv")))
-
-
-##### Cluster normalizer using reference 'normal' value for percentiles
-clusters_amp <- data.frame(cluster_amplitude = unlist(clusters_sheet_row2))
-clusters_lat_sheet <- c(clusters_sheet[3,])
-clusters_lat <- data.frame(cluster_latency = unlist(clusters_lat_sheet))
-clusters_desc <- cbind.data.frame(clusters_amp, clusters_lat)
-# Check and convert columns to numeric if needed
-clusters_desc$cluster_amplitude <- as.numeric(clusters_desc$cluster_amplitude)
-clusters_desc$cluster_latency <- as.numeric(clusters_desc$cluster_latency)
-# Extract min and max from clusters_sheet
-n <- ncol(clusters_sheet)
-
-# Extract numbers from the cell
-extract_numbers <- function(text) {
-  numbers <- str_extract_all(text, "\\d+\\.\\d+")[[1]]
-  return(as.numeric(numbers))
-}
-
-# For normal_min (first number in parentheses)
-normal_min_text <- clusters_sheet[5, 1]
-normal_min <- extract_numbers(normal_min_text)[1]  # First number
-
-# For normal_max (second number in parentheses)
-normal_max_text <- clusters_sheet[5, n]
-normal_max <- extract_numbers(normal_max_text)[2]  # Second number
-
-
-# Normalize cluster data into 10 percentile bins based on reference 'normal' value
-normalize_clusters <- function(clusters_desc, normal,normal_min) {
-  # Ensure we have at least 10 clusters to avoid empty bins
-  if (nrow(clusters_desc) < 10) {
-    warning("Fewer than 10 clusters - some bins may be empty or contain few points")
+  for (i in seq_along(neuron_list)) {
+    cluster      <- as.data.frame(neuron_list[[i]])
+    if (ncol(cluster) >= 44) cluster <- cluster[-c(12:44)]
+    names(cluster)[8] <- "ap_loc_sec"
+    original_name <- names(neuron_list)[i]
+    
+    # Probabilities
+    unique_bursts <- length(unique(cluster$`Burst Number`))
+    beats_prob    <- unique_bursts / beats_total * 100
+    offbeats_prob <- (beats_total - unique_bursts) / beats_total * 100
+    cluster_prob  <- unique_bursts / burst_total  * 100
+    off_prob      <- (burst_total  - unique_bursts) / burst_total * 100
+    
+    beats_df      <- cbind.data.frame(offbeats_prob, beats_prob)
+    beats_df_melt <- reshape2::melt(beats_df, id.vars = character(0))
+    prob_df       <- cbind.data.frame(off_prob, cluster_prob)
+    prob_df_melt  <- reshape2::melt(prob_df,  id.vars = character(0))
+    
+    dbcluster_prob_list[[i]] <- ggplot2::ggplot(prob_df_melt, ggplot2::aes(variable, value, fill = variable)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", original_name)) +
+      ggplot2::ylim(0, 100) +
+      ggplot2::ylab("Probability") + ggplot2::xlab("") +
+      ggsci::scale_fill_jco() + ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
+    
+    dbbeats_prob_list[[i]] <- ggplot2::ggplot(beats_df_melt, ggplot2::aes(variable, value, fill = variable)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", original_name)) +
+      ggplot2::ylim(0, 100) +
+      ggplot2::ylab("Probability") + ggplot2::xlab("") +
+      ggsci::scale_fill_jco() + ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
+    
+    # Multi-fire
+    cluster_counts <- table(cluster$`Burst Number`)
+    summary_table  <- table(factor(cluster_counts, levels = 1:6, labels = c("1","2","3","4","5","6+")))
+    dbmultifire_df <- as.data.frame(summary_table)
+    colnames(dbmultifire_df) <- c("Multiple_firings", "Frequency")
+    freq_total     <- sum(dbmultifire_df$Frequency)
+    dbmultifire_df$Probability <- dbmultifire_df$Frequency / freq_total * 100
+    
+    dbmultifire_list[[i]] <- ggplot2::ggplot(dbmultifire_df, ggplot2::aes(Multiple_firings, Probability, fill = Multiple_firings)) +
+      ggplot2::geom_col() +
+      ggplot2::ggtitle(paste("cluster", original_name)) +
+      ggplot2::ylim(0, 100) +
+      ggsci::scale_fill_jco() + ggplot2::guides(fill = "none") +
+      ggplot2::theme_classic()
   }
   
-  # Create percentile breaks based on the reference 'normal' value (0% to 100% of normal)
-  percentile_breaks <- seq(normal_min, normal, length.out = 11)
+  # Reshape — exactly as original
+  dbbeats_data <- dbbeats_prob_list %>%
+    imap_dfr(~ { .x$data %>% mutate(cluster = .y) %>% select(cluster, variable, value) }) %>%
+    pivot_wider(names_from = variable, values_from = value, names_glue = "{variable}_prob") %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))
   
-  # Bin the amplitudes according to the reference breaks
-  clusters_desc$percentile_bin <- cut(
-    clusters_desc$cluster_amplitude,
-    breaks = percentile_breaks,
-    include.lowest = TRUE,
-    labels = FALSE
+  dbbursts_data <- dbcluster_prob_list %>%
+    imap_dfr(~ { .x$data %>% mutate(cluster = .y) %>% select(cluster, variable, value) }) %>%
+    pivot_wider(names_from = variable, values_from = value, names_glue = "{variable}_prob") %>%
+    rename_with(~ gsub("_prob_prob", "_prob", .x))
+  
+  dbprob_data <- merge(dbbeats_data, dbbursts_data, by = "cluster")
+  
+  dbmultifire_data <- dbmultifire_list %>%
+    imap_dfr(~ {
+      .x$data %>%
+        mutate(cluster = .y) %>%
+        select(cluster, Multiple_firings, Frequency, Probability)
+    }) %>%
+    pivot_wider(
+      names_from  = Multiple_firings,
+      values_from = c(Frequency, Probability),
+      names_glue  = "{.value}_{Multiple_firings}"
+    )
+  
+  dbprob_data <- merge(dbprob_data, dbmultifire_data, by = "cluster")
+
+  
+  # Latency summary (DBSCAN-level)
+  df_dbmean <- bind_rows(neuron_list, .id = "cluster_name")
+  dbmean_ap_latency <- df_dbmean %>%
+    dplyr::group_by(cluster_name) %>%
+    dplyr::summarise(across(
+      c(ap_latency, ap_amp),
+      list(
+        median = ~median(., na.rm = TRUE),
+        iqr    = ~IQR(.,    na.rm = TRUE),
+        q1     = ~quantile(., 0.25, na.rm = TRUE),
+        q3     = ~quantile(., 0.75, na.rm = TRUE)
+      )
+    ))
+
+  
+  return(list(
+    dbprob_data       = dbprob_data,
+    dbmean_ap_latency = dbmean_ap_latency,
+    dbcluster_prob_list = dbcluster_prob_list,
+    dbbeats_prob_list   = dbbeats_prob_list,
+    dbmultifire_list    = dbmultifire_list
+  ))
+}
+
+# analyze_isi---------------------------------------------------------
+# ISI Analyzer 
+# Fn: Calculates within-burst inter-spike intervals using absolute ap_loc_sec
+# Exec: isi_raw  <- analyze_isi(neurons_df,             file_id_folder, file_id)
+#       isi_norm <- analyze_isi(norm_bundle$normalized, file_id_folder, file_id, suffix = "_NORM")
+# ---------------------------------------------------------
+analyze_isi <- function(neurons_df, folder_path, file_id, suffix = "", split_by = "Cluster Number") {
+
+  # ISI calculator — gap between consecutive APs within each burst+cluster
+  calculate_diff_info <- function(df) {
+    df %>%
+      dplyr::group_by(`Burst Number`, `Cluster Number`) %>%
+      dplyr::arrange(ap_loc_sec) %>%
+      dplyr::mutate(ap_isi = ap_loc_sec - dplyr::lag(ap_loc_sec)) %>%
+      dplyr::filter(!is.na(ap_isi)) %>%
+      dplyr::select(`Burst Number`, `Cluster Number`, ap_isi)
+  }
+
+  split_clusters  <- split(neurons_df, neurons_df[[split_by]])
+  all_differences <- dplyr::bind_rows(lapply(split_clusters, calculate_diff_info), .id = "Cluster")
+
+  summary_list <- list()
+
+  for (cluster in unique(all_differences$Cluster)) {
+    cluster_data <- all_differences %>% dplyr::filter(Cluster == cluster)
+
+    multicount <- cluster_data %>%
+      dplyr::group_by(Cluster, `Burst Number`) %>%
+      dplyr::mutate(pair_count = dplyr::n()) %>%
+      dplyr::ungroup() %>%
+      dplyr::mutate(
+        n_2fire    = as.integer(pair_count == 1),
+        n_3fire    = as.integer(pair_count == 2),
+        n_4fire    = as.integer(pair_count == 3),
+        `n_5+fire` = as.integer(pair_count >= 4)
+      )
+firing_stats <- multicount %>%
+      dplyr::mutate(fire_group = dplyr::case_when(
+        n_2fire    == 1 ~ "2fire",
+        n_3fire    == 1 ~ "3fire",
+        n_4fire    == 1 ~ "4fire",
+        `n_5+fire` == 1 ~ "5fire"
+      )) %>%
+      dplyr::filter(!is.na(fire_group)) %>%
+      dplyr::group_by(fire_group) %>%
+      dplyr::summarise(
+        me  = mean(ap_isi,   na.rm = TRUE),
+        sd  = sd(ap_isi,     na.rm = TRUE),
+        md  = median(ap_isi, na.rm = TRUE),
+        iqr = IQR(ap_isi,    na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      tidyr::pivot_wider(
+        names_from  = fire_group,
+        values_from = c(me, sd, md, iqr),
+        names_glue  = "{fire_group}_{.value}"
+      )
+
+    summary_list[[cluster]] <- dplyr::bind_cols(
+      data.frame(
+        file_id,
+        cluster,
+        cl_isi_count  = nrow(cluster_data),
+        cl_ap_isi_me  = mean(cluster_data$ap_isi,   na.rm = TRUE),
+        cl_ap_isi_sd  = sd(cluster_data$ap_isi,     na.rm = TRUE),
+        cl_ap_isi_md  = median(cluster_data$ap_isi, na.rm = TRUE),
+        cl_ap_isi_iqr = IQR(cluster_data$ap_isi,    na.rm = TRUE),
+        cl_ap_isi_min = min(cluster_data$ap_isi,    na.rm = TRUE),
+        cl_ap_isi_max = max(cluster_data$ap_isi,    na.rm = TRUE),
+        n_2fire       = sum(multicount$n_2fire),
+        n_3fire       = sum(multicount$n_3fire),
+        n_4fire       = sum(multicount$n_4fire),
+        n_5fire       = sum(multicount$`n_5+fire`),
+        stringsAsFactors = FALSE
+      ),
+      firing_stats
+    )
+  }
+  output_df <- dplyr::bind_rows(summary_list)
+  return(list(data = output_df, all_differences = all_differences))
+}
+# create_master_summary---------------------------------------------------------
+# Master Cluster Summary Generator
+# Fn: Builds cluster_summary.png and latency_amplitude.png; saves all final CSVs
+# Exec: create_master_summary(cluster_list, neurons_df, shape_plots, beats_prob_list,
+#                             cluster_prob_list, multifire_list, ap_sheet,
+#                             total_time, plots_folder, file_id_folder, file.id,
+#                             clusters_sheet, dbprob_data, dbmean_ap_latency)
+# ---------------------------------------------------------
+create_master_summary <- function(cluster_list, neurons_df, shape_plots,beats_prob_list, cluster_prob_list, multifire_list,ap_sheet, total_time,plots_folder, file_id_folder, file_id,clusters_sheet, dbprob_data, dbmean_ap_latency) {
+  
+  # --- 1. DBSCAN Lat/Amp plots (one per base cluster) ---
+  # Use full ap_sheet range for xlim — matches original exactly
+  min_latency <- min(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
+  max_latency <- max(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
+  
+  # Colour scheme matching original: "0"=grey (noise), "1"=blue, "2"=yellow, "3"=red
+  cols <- c("0" = "#868686FF", "1" = "#0073C2FF", "2" = "#EFC000FF", "3" = "#CD534CFF")
+  
+  cluster_lat_amp_list <- list()
+  lat_amp_with_clusters_list <- list()
+  
+  for (i in seq_along(cluster_list)) {
+    lat_amp <- as.data.frame(cluster_list[[i]])
+    lat_amp <- lat_amp[c(1, 3, 5, 9)]  # burst_number, ap_id, ap_amp, ap_latency — same cols as original
+    colnames(lat_amp) <- c("burst_number", "ap_id", "ap_amp", "ap_latency")
+    
+    scaled_data              <- scale(as.matrix(lat_amp$ap_latency))
+    scaled_data[is.nan(scaled_data)] <- 0
+    dbscan_result            <- dbscan::dbscan(scaled_data, eps = 0.7, minPts = 4)
+    cluster_assignments      <- dbscan_result$cluster
+    
+    lat_amp_with_clusters    <- cbind(lat_amp, Cluster = factor(cluster_assignments))
+    names(lat_amp_with_clusters)[5] <- "neuron_id"
+    lat_amp_with_clusters_list[[i]] <- lat_amp_with_clusters
+    
+    cluster_lat_amp_list[[i]] <- ggplot2::ggplot(
+      lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
+    ) +
+      ggplot2::geom_point() +
+      ggplot2::geom_density(
+        inherit.aes = FALSE,
+        data    = lat_amp_with_clusters,
+        ggplot2::aes(ap_latency),
+        adjust  = 0.5,
+        alpha   = 0.5
+      ) +
+      ggplot2::labs(x = "Latency", y = "Amplitude", color = "DBSCAN") +
+      ggplot2::xlim(min_latency, max_latency) +
+      ggplot2::ggtitle(paste("cluster", levels(cluster_list[[i]]$`Cluster Number`)[i])) +
+      ggplot2::scale_color_manual(values = cols) +
+      ggplot2::theme_classic()
+  }
+  
+  # --- 2. latency_amplitude.png (standalone, as original) ---
+  lat_amp_summary <- gridExtra::grid.arrange(grobs = cluster_lat_amp_list, ncol = 1)
+  gridheight      <- length(cluster_lat_amp_list) * 2
+  lat_amp_summary <- gridExtra::arrangeGrob(lat_amp_summary, top = file_name)
+  ggplot2::ggsave("latency_amplitude.png", lat_amp_summary,
+                  path = plots_folder, height = gridheight, width = 15, limitsize = FALSE)
+  
+  # --- 3. all_lat_amp_plot.png (standalone, as original) ---
+  all_lat_amp <- ap_sheet[c(4, 8, 9)]
+  all_lat_amp <- tidyr::drop_na(all_lat_amp)
+  colnames(all_lat_amp) <- c("ap_amp", "ap_latency", "Cluster")
+  all_lat_amp$Cluster   <- as.integer(all_lat_amp$Cluster)
+  
+  all_lat_amp_plot <- ggplot2::ggplot(all_lat_amp, ggplot2::aes(ap_latency, ap_amp, color = Cluster)) +
+    ggplot2::geom_point() +
+    ggplot2::labs(x = "Latency", y = "Amplitude", color = "Cluster") +
+    ggplot2::xlim(min_latency, max_latency) +
+    ggplot2::ggtitle("Amplitude/Latency") +
+    ggplot2::scale_color_continuous(type = "viridis") +
+    ggplot2::theme_classic()
+  ggplot2::ggsave("all_lat_amp_plot.png", all_lat_amp_plot,
+                  path = plots_folder, height = 15, width = 15)
+  
+  # --- 4. cluster_summary.png ---
+  # Layout: shape | beats_prob | cluster_prob | multifire | lat_amp  (5 cols, widths c(1,1,1,2,2))
+  # Exactly matches original combined_grobs_list loop
+  combined_grobs_list <- list()
+  for (i in seq_along(shape_plots)) {
+    combined_plot <- gridExtra::grid.arrange(
+      shape_plots[[i]],
+      beats_prob_list[[i]],
+      cluster_prob_list[[i]],
+      multifire_list[[i]],
+      cluster_lat_amp_list[[i]],
+      widths = c(1, 1, 1, 2, 2),
+      ncol   = 5
+    )
+    combined_grobs_list <- c(combined_grobs_list, list(combined_plot))
+  }
+  
+  grid         <- gridExtra::grid.arrange(grobs = combined_grobs_list, ncol = 1)
+  cluster_summary <- gridExtra::arrangeGrob(grid, top = file_name)
+  gridheight   <- length(combined_grobs_list) * 2
+  ggplot2::ggsave("cluster_summary.png", cluster_summary,
+                  path = plots_folder, height = gridheight, width = 15, limitsize = FALSE)
+  
+  # --- 5. Reference Binning CSV ---
+  extract_numbers <- function(text) {
+    numbers <- stringr::str_extract_all(text, "\\d+\\.\\d+")[[1]]
+    return(as.numeric(numbers))
+  }
+  n           <- ncol(clusters_sheet)
+  normal_min  <- extract_numbers(clusters_sheet[5, 1])[1]
+  normal_max  <- extract_numbers(clusters_sheet[5, n])[2]
+  
+  clusters_sheet_row2 <- c(clusters_sheet[2, ])
+  clusters_lat_sheet  <- c(clusters_sheet[3, ])
+  clusters_desc <- cbind.data.frame(
+    cluster_amplitude = as.numeric(clusters_sheet_row2),
+    cluster_latency   = as.numeric(clusters_lat_sheet)
   )
   
-  # Calculate mean amplitude and latency per bin
-  result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
-                      data = clusters_desc, 
-                      FUN = median)
+  normalize_clusters <- function(clusters_desc, normal, normal_min) {
+    if (nrow(clusters_desc) < 10) {
+      warning("Fewer than 10 clusters - some bins may be empty or contain few points")
+    }
+    percentile_breaks <- seq(normal_min, normal, length.out = 11)
+    clusters_desc$percentile_bin <- cut(
+      clusters_desc$cluster_amplitude,
+      breaks          = percentile_breaks,
+      include.lowest  = TRUE,
+      labels          = FALSE
+    )
+    result <- aggregate(cbind(cluster_amplitude, cluster_latency) ~ percentile_bin,
+                        data = clusters_desc, FUN = median)
+    result$percentile_range <- paste0((result$percentile_bin - 1) * 10, "-", result$percentile_bin * 10, "%")
+    result <- result[order(result$percentile_bin),
+                     c("percentile_bin", "percentile_range", "cluster_amplitude", "cluster_latency")]
+    return(result)
+  }
   
-  # Add percentile range labels (relative to normal)
-  result$percentile_range <- paste0((result$percentile_bin-1)*10, "-", result$percentile_bin*10, "%")
-  
-  # Order by bin and clean up output
-  result <- result[order(result$percentile_bin), 
-                   c("percentile_bin", "percentile_range", "cluster_amplitude", "cluster_latency")]
-  
-  return(result)
+  binned_clusters <- normalize_clusters(clusters_desc, normal_max, normal_min)
+
+  return(list(grid = cluster_summary, binned = binned_clusters))
 }
 
-binned_clusters <- normalize_clusters(clusters_desc, normal_max,normal_min)
-write.csv(binned_clusters,file.path(file_id_folder, paste0(file.id, "NORMALIZED_cluster_description.csv")))
-
-# Final saving step
-  write.csv(dbprob_data, file.path(file_id_folder, paste0(file.id, "DBSCAN_probabilities.csv")))
-  #####SAVE R FILE FOR FUTURE USE
-  # Save the R session inside the folder
-  save.image(file.path(file_id_folder, paste0(file.id, "_session.RData")))
-  #save and clean environment for new session
+# export_all_results---------------------------------------------------------
+# Master CSV Exporter
+# Fn: Single point of truth for all write.csv output — called once per file at end of pipeline
+# Exec: export_all_results(folder_path, norm_bundle, ap_metrics, base_prob_results,
+#                          db_stats_bundle, isi_raw, isi_norm, master_summary)
+# ---------------------------------------------------------
+export_all_results <- function(folder_path, norm_bundle, ap_metrics, base_prob_results, db_stats_bundle, isi_raw, isi_norm, master_summary) {
   
-  saveRDS(environment(), file.path(file_id_folder, paste0(file.id, "_environment.RDS")))
+  # Helper to write with consistent row.names = FALSE
+save_csv <- function(data, filename) {
+    write.csv(data, file.path(folder_path, paste0(file_name, filename)), row.names = FALSE)
+  }
   
-  message("DBSCAN analyzed for: ", file.id)
+  # --- Neuron data (raw and normalised) ---
+  save_csv(norm_bundle$raw,        "_RAW_neurons.csv")
+  save_csv(norm_bundle$normalized, "_NORM_PERCENT_neurons.csv")
+  
+  # --- AP latency / amplitude summaries ---
+  save_csv(ap_metrics$locator, "_LOCATOR_AP.csv")
+  save_csv(ap_metrics$summary, "_apd_latency_summary.csv")
+  
+  # --- Base cluster firing probabilities ---
+  save_csv(base_prob_results$prob_data, "_probabilities.csv")
+  
+  # --- DBSCAN neuron-level probabilities and latency ---
+  save_csv(db_stats_bundle$dbprob_data,       "_DBSCAN_probabilities.csv")
+  save_csv(db_stats_bundle$dbmean_ap_latency, "_DBSCAN_apd_latency_summary.csv")
+  
+  # --- ISI summaries (raw and normalised) ---
+  save_csv(isi_raw$data,  "_ISI_summary.csv")
+  save_csv(isi_norm$data, "_ISI_summary_NORM.csv")
+  
+  # --- Normalised cluster description (percentile bins) ---
+  save_csv(master_summary$binned, "_NORMALIZED_cluster_description.csv")
+  
+  message("  Exports saved for: ", file_name)
 }
 
-print("ALL FILES ANALYZED")
+# archive_analysis_session---------------------------------------------------------
+# Session Archiver
+# Fn: Saves full workspace and environment RDS for the current file
+# Exec: archive_analysis_session(file_id_folder, file_id)
+# ---------------------------------------------------------
+archive_analysis_session <- function(folder_path, file_id) {
+  save.image(file.path(folder_path, paste0(file_id, "_session.RData")))
+  saveRDS(environment(), file.path(folder_path, paste0(file_id, "_environment.RDS")))
+}
 
+#------------------------------------------MAINLOOP------------------------------------------------#
+print("Starting DBSCAN Analysis...")
+
+for (file_id in names(all_data)) {
+  file_name <- substr(file_id, 1, nchar(file_id) - 10)
+  message("--- Analyzing: ", file_name, " ---")
+  
+  # 1. Extract Sheets for Current File
+  summ_sheet      <- all_data[[file_id]]$summ
+  burst_sheet     <- all_data[[file_id]]$burst
+  ap_sheet        <- all_data[[file_id]]$ap
+  ap_shapes_sheet <- all_data[[file_id]]$ap_shapes
+  clusters_sheet  <- all_data[[file_id]]$clusters
+  rri_sheet       <- all_data[[file_id]]$rri
+  
+  # 2. Setup Folders
+  file_id_folder <- file.path(analyzed_folder, file_id)
+  if (!dir.exists(file_id_folder)) dir.create(file_id_folder, recursive = TRUE)
+  plots_folder <- file.path(file_id_folder, "plots")
+  if (!dir.exists(plots_folder)) dir.create(plots_folder)
+  
+
+  # 3. Setup Baselines
+  beats_total <- nrow(rri_sheet)
+  burst_total <- max(burst_sheet$`Burst Number`, na.rm = TRUE)
+  total_time  <- as.numeric(max(summ_sheet$`Data Duration (s)`, na.rm = TRUE))
+  
+  # ---------------------------------------------------------
+  # CORE_PROCESSING_PIPELINE----------------------------------
+  #
+  # Step A: Data Prep & Base Visuals
+  cluster_list <- prep_apd_data(ap_sheet, ap_shapes_sheet)
+  main_ap_vis  <- generate_smoothed_ap(ap_shapes_sheet)
+  
+  # Step B: Shape Plotting & Base Probabilities
+  shape_plots       <- visualize_apd_clusters(cluster_list, main_ap_vis, clusters_sheet, plots_folder)
+  base_prob_results <- analyze_firing_probabilities(cluster_list, rri_sheet, burst_sheet, plots_folder)
+  
+  # Step C: DBSCAN Isolation & Metric Summaries
+  neurons_df <- dbscan_isolate_neuron_data(cluster_list, eps = 0.7, minPts = 1)
+  ap_metrics <- summarize_ap_metrics(neurons_df, file_id_folder, file_name)
+  
+  # Step D: Normalize neurons
+  norm_bundle <- normalize_neurons_full(neurons_df, clusters_sheet, file_id_folder, file_name)
+  
+  # Step E: ISI Analysis (master timescale) — raw and normalized
+  isi_raw  <- analyze_isi(neurons_df,             file_id_folder, file_name)
+  isi_norm <- analyze_isi(norm_bundle$normalized, file_id_folder, file_name, suffix = "_NORM", split_by = "amp_percentile_bin")
+  
+  # Step F: Split by Sub-Neuron & Analyze Final DBSCAN Probabilities
+  dbscan_cluster_list <- split(neurons_df, neurons_df$`Cluster Number`)
+  neuron_list         <- split_list_by_neuron(dbscan_cluster_list)
+  db_stats_bundle     <- analyze_neuron_probabilities(
+    neuron_list, beats_total, burst_total, file_id_folder, file_name
+  )
+  
+  # Step G: Master Summary Grid (plots only)
+  master_summary <- create_master_summary(
+    cluster_list      = cluster_list,
+    neurons_df        = neurons_df,
+    shape_plots       = shape_plots,
+    beats_prob_list   = base_prob_results$beats_prob_list,
+    cluster_prob_list = base_prob_results$prob_plots,
+    multifire_list    = base_prob_results$multi_plots,
+    ap_sheet          = ap_sheet,
+    total_time        = total_time,
+    plots_folder      = plots_folder,
+    file_id_folder    = file_id_folder,
+    file_id           = file_name,
+    clusters_sheet    = clusters_sheet,
+    dbprob_data       = db_stats_bundle$dbprob_data,
+    dbmean_ap_latency = ap_metrics$summary
+  )
+  
+  # Step H: Export all CSVs — single point of truth for all output files
+  export_all_results(
+    folder_path       = file_id_folder,
+    norm_bundle       = norm_bundle,
+    ap_metrics        = ap_metrics,
+    base_prob_results = base_prob_results,
+    db_stats_bundle   = db_stats_bundle,
+    isi_raw           = isi_raw,
+    isi_norm          = isi_norm,
+    master_summary    = master_summary
+  )
+  
+  # Step I: Archive Session Data
+  archive_analysis_session(file_id_folder, file_name)
+  
+  # Clean environment for next loop iteration (keeps all functions and shared data intact)
+  rm(list = setdiff(ls(), c("all_data", "analyzed_folder","file_name","file_id ",
+                             as.character(lsf.str()))))
+  
+  message("Done: ", file_name)
+}
+
+print("ALL FILES ANALYZED SUCCESSFULLY")

@@ -12,9 +12,9 @@ ui <- fluidPage(
     column(12, align = "center",
            actionButton("setwd_btn", "Set Output Directory", width = '300px', style = "font-size: 20px; margin: 20px;"),
            actionButton("selfil_btn", "Select APD output files", width = '300px', style = "font-size: 20px; margin: 20px;"),
-           actionButton("dbscan_btn", "Run DBSCAN Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
-           actionButton("isi_btn", "Run ISI Cluster Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
-           actionButton("arrhythmia_btn", "Run Arrhythmia Analysis", width = '300px', style = "font-size: 20px; margin: 20px;")
+           actionButton("dbscan_btn", "Run DBSCAN/ISI Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
+           #actionButton("isi_btn", "Run ISI Cluster Analysis", width = '300px', style = "font-size: 20px; margin: 20px;"),
+           #actionButton("arrhythmia_btn", "Run Arrhythmia Analysis", width = '300px', style = "font-size: 20px; margin: 20px;")
     )
   ),
   
