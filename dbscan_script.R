@@ -617,6 +617,60 @@ firing_stats <- multicount %>%
   output_df <- dplyr::bind_rows(summary_list)
   return(list(data = output_df, all_differences = all_differences))
 }
+# plot_isi---------------------------------------------------------
+# ISI Figure Generator
+# Fn: Density + jitter plot per cluster from analyze_isi output
+# Exec: plot_isi(isi_raw, plots_folder, file_name)
+# ---------------------------------------------------------
+plot_isi <- function(isi_result, plots_folder, file_name) {
+  
+  all_differences <- isi_result$all_differences
+  max_isi         <- max(all_differences$ap_isi, na.rm = TRUE)
+  plots_list      <- list()
+  
+  for (cluster in unique(all_differences$Cluster)) {
+    cluster_data  <- all_differences %>% dplyr::filter(Cluster == cluster)
+    cl_ap_isi_md  <- median(cluster_data$ap_isi, na.rm = TRUE)
+    cl_ap_isi_me  <- mean(cluster_data$ap_isi,   na.rm = TRUE)
+    
+    plots_list[[cluster]] <- ggplot2::ggplot(
+      cluster_data, ggplot2::aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))
+    ) +
+      ggplot2::geom_density(
+        data = cluster_data, ggplot2::aes(x = ap_isi),
+        color = "black", fill = "grey", alpha = 0.3, linewidth = 1
+      ) +
+      ggplot2::geom_point(
+        position = ggplot2::position_jitter(width = 0, height = 0.1),
+        ggplot2::aes(y = 0), size = 2
+      ) +
+      ggplot2::geom_vline(xintercept = cl_ap_isi_md, linetype = "dashed", color = "red") +
+      ggplot2::geom_vline(xintercept = cl_ap_isi_me, linetype = "solid",  color = "blue") +
+      ggplot2::xlim(0, max_isi) +
+      ggplot2::labs(title = paste("Cluster", cluster)) +
+      ggpubr::theme_classic2() +
+      ggplot2::annotate("text", x = cl_ap_isi_md, y = 3, label = paste("median", round(cl_ap_isi_md, 2))) +
+      ggplot2::annotate("text", x = cl_ap_isi_me, y = 1, label = paste("mean",   round(cl_ap_isi_me, 2))) +
+      ggplot2::theme(
+        axis.title.x  = ggplot2::element_blank(),
+        axis.title.y  = ggplot2::element_blank(),
+        axis.text.y   = ggplot2::element_blank(),
+        legend.position = "none"
+      )
+  }
+  
+  file_label    <- grid::textGrob(paste("File:", file_name), gp = grid::gpar(fontsize = 10))
+  combined_plot <- do.call(gridExtra::grid.arrange, c(plots_list, list(file_label), ncol = 1))
+  
+  ggplot2::ggsave(
+    file.path(plots_folder, paste0(file_name, "_isi_plot.png")),
+    plot   = combined_plot,
+    width  = 6,
+    height = length(plots_list) * 1.5
+  )
+  
+  return(combined_plot)
+}
 # create_master_summary---------------------------------------------------------
 # Master Cluster Summary Generator
 # Fn: Builds cluster_summary.png and latency_amplitude.png; saves all final CSVs
@@ -849,10 +903,12 @@ for (file_id in names(all_data)) {
   # Step D: Normalize neurons
   norm_bundle <- normalize_neurons_full(neurons_df, clusters_sheet, file_id_folder, file_name)
   
-  # Step E: ISI Analysis (master timescale) — raw and normalized
+  # Step E: ISI Analysis (master timescale) — raw and normalized with plots
   isi_raw  <- analyze_isi(neurons_df,             file_id_folder, file_name)
   isi_norm <- analyze_isi(norm_bundle$normalized, file_id_folder, file_name, suffix = "_NORM", split_by = "amp_percentile_bin")
-  
+  plot_isi(isi_raw,  plots_folder, file_name)
+  plot_isi(isi_norm, plots_folder, paste0(file_name, "_NORM"))
+
   # Step F: Split by Sub-Neuron & Analyze Final DBSCAN Probabilities
   dbscan_cluster_list <- split(neurons_df, neurons_df$`Cluster Number`)
   neuron_list         <- split_list_by_neuron(dbscan_cluster_list)
