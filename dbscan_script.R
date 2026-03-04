@@ -907,7 +907,7 @@ archive_analysis_session <- function(folder_path, file_id) {
 print("Starting DBSCAN Analysis...")
 GITHUB_RAW_URL  <- "https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R"
 current_version <- get_github_version(GITHUB_RAW_URL)
-
+failed_files <- character(0)
 for (file_id in names(all_data)) {
   file_name <- substr(file_id, 1, nchar(file_id) - 10)
   message("--- Analyzing: ", file_name, " ---")
