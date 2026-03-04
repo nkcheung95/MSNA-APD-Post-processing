@@ -719,55 +719,46 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
 # create_master_summary---------------------------------------------------------
 # Master Cluster Summary Generator
 # Fn: Builds cluster_summary.png and latency_amplitude.png; saves all final CSVs
-# Exec: create_master_summary(cluster_list, neurons_df, shape_plots, beats_prob_list,
-#                             cluster_prob_list, multifire_list, ap_sheet,
-#                             total_time, plots_folder, file_id_folder, file.id,
-#                             clusters_sheet, dbprob_data, dbmean_ap_latency)
+# Exec: create_master_summary <- function(cluster_list, neurons_df, shape_plots, beats_prob_list,
+#                                  cluster_prob_list, multifire_list, ap_sheet,
+#                                  total_time, plots_folder, file_id_folder, file_id,
+#                                  clusters_sheet, dbprob_data, dbmean_ap_latency) 
 # ---------------------------------------------------------
-create_master_summary <- function(cluster_list, neurons_df, shape_plots,beats_prob_list, cluster_prob_list, multifire_list,ap_sheet, total_time,plots_folder, file_id_folder, file_id,clusters_sheet, dbprob_data, dbmean_ap_latency) {
+create_master_summary <- function(cluster_list, neurons_df, shape_plots, beats_prob_list,cluster_prob_list, multifire_list, ap_sheet,total_time, plots_folder, file_id_folder, file_id,clusters_sheet, dbprob_data, dbmean_ap_latency) {  
+  # --- 1. DBSCAN Lat/Amp plots (reuse existing neuron assignments from neurons_df) ---
+min_latency <- min(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
+max_latency <- max(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
+
+cols <- c("0" = "#868686FF", "1" = "#0073C2FF", "2" = "#EFC000FF", "3" = "#CD534CFF")
+
+cluster_lat_amp_list <- list()
+
+for (i in seq_along(cluster_list)) {
+  cluster_num <- levels(cluster_list[[i]]$`Cluster Number`)[i]
   
-  # --- 1. DBSCAN Lat/Amp plots (one per base cluster) ---
-  # Use full ap_sheet range for xlim — matches original exactly
-  min_latency <- min(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
-  max_latency <- max(ap_sheet$`AP Latency (s)`, na.rm = TRUE)
-  
-  # Colour scheme matching original: "0"=grey (noise), "1"=blue, "2"=yellow, "3"=red
-  cols <- c("0" = "#868686FF", "1" = "#0073C2FF", "2" = "#EFC000FF", "3" = "#CD534CFF")
-  
-  cluster_lat_amp_list <- list()
-  lat_amp_with_clusters_list <- list()
-  
-  for (i in seq_along(cluster_list)) {
-    lat_amp <- as.data.frame(cluster_list[[i]])
-    lat_amp <- lat_amp[c(1, 3, 5, 9)]  # burst_number, ap_id, ap_amp, ap_latency — same cols as original
-    colnames(lat_amp) <- c("burst_number", "ap_id", "ap_amp", "ap_latency")
-    
-    scaled_data              <- scale(as.matrix(lat_amp$ap_latency))
-    scaled_data[is.nan(scaled_data)] <- 0
-    dbscan_result            <- dbscan::dbscan(scaled_data, eps = 0.7, minPts = 4)
-    cluster_assignments      <- dbscan_result$cluster
-    
-    lat_amp_with_clusters    <- cbind(lat_amp, Cluster = factor(cluster_assignments))
-    names(lat_amp_with_clusters)[5] <- "neuron_id"
-    lat_amp_with_clusters_list[[i]] <- lat_amp_with_clusters
-    
-    cluster_lat_amp_list[[i]] <- ggplot2::ggplot(
-      lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
+  # Pull pre-computed neuron_id from neurons_df instead of re-running DBSCAN
+  lat_amp_with_clusters <- neurons_df %>%
+    dplyr::filter(`Cluster Number` == cluster_num) %>%
+    dplyr::select(ap_amp, ap_latency, neuron_id) %>%
+    dplyr::mutate(neuron_id = factor(neuron_id))
+
+  cluster_lat_amp_list[[i]] <- ggplot2::ggplot(
+    lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
+  ) +
+    ggplot2::geom_point() +
+    ggplot2::geom_density(
+      inherit.aes = FALSE,
+      data = lat_amp_with_clusters,
+      ggplot2::aes(ap_latency),
+      adjust = 0.5,
+      alpha = 0.5
     ) +
-      ggplot2::geom_point() +
-      ggplot2::geom_density(
-        inherit.aes = FALSE,
-        data    = lat_amp_with_clusters,
-        ggplot2::aes(ap_latency),
-        adjust  = 0.5,
-        alpha   = 0.5
-      ) +
-      ggplot2::labs(x = "Latency", y = "Amplitude", color = "DBSCAN") +
-      ggplot2::xlim(min_latency, max_latency) +
-      ggplot2::ggtitle(paste("cluster", levels(cluster_list[[i]]$`Cluster Number`)[i])) +
-      ggplot2::scale_color_manual(values = cols) +
-      ggplot2::theme_classic()
-  }
+    ggplot2::labs(x = "Latency", y = "Amplitude", color = "DBSCAN") +
+    ggplot2::xlim(min_latency, max_latency) +
+    ggplot2::ggtitle(paste("cluster", cluster_num)) +
+    ggplot2::scale_color_manual(values = cols) +
+    ggplot2::theme_classic()
+}
   
   # --- 2. latency_amplitude.png (standalone, as original) ---
   lat_amp_summary <- gridExtra::grid.arrange(grobs = cluster_lat_amp_list, ncol = 1)
@@ -858,10 +849,10 @@ create_master_summary <- function(cluster_list, neurons_df, shape_plots,beats_pr
 # export_all_results---------------------------------------------------------
 # Master CSV Exporter
 # Fn: Single point of truth for all write.csv output — called once per file at end of pipeline
-# Exec: export_all_results(folder_path, norm_bundle, ap_metrics, base_prob_results,
+# Exec: export_all_results(folder_path, file_name, norm_bundle, ap_metrics, base_prob_results,
 #                          db_stats_bundle, isi_raw, isi_norm, master_summary)
 # ---------------------------------------------------------
-export_all_results <- function(folder_path, norm_bundle, ap_metrics, base_prob_results, db_stats_bundle, isi_raw, isi_norm, master_summary) {
+export_all_results <- function(folder_path, file_name, norm_bundle, ap_metrics,base_prob_results, db_stats_bundle, isi_raw, isi_norm,master_summary) {
   
   # Helper to write with consistent row.names = FALSE
 save_csv <- function(data, filename) {
@@ -898,14 +889,14 @@ save_csv <- function(data, filename) {
 # Fn: Saves full workspace and environment RDS for the current file
 # Exec: archive_analysis_session(file_id_folder, file_id)
 # ---------------------------------------------------------
-archive_analysis_session <- function(folder_path, file_id) {
-  save.image(file.path(folder_path, paste0(file_id, "_session.RData")))
-  saveRDS(environment(), file.path(folder_path, paste0(file_id, "_environment.RDS")))
+archive_analysis_session <- function(folder_path, file_id, neurons_df, ap_metrics, norm_bundle) {
+  saveRDS(list(neurons_df = neurons_df, ap_metrics = ap_metrics, norm_bundle = norm_bundle),
+          file.path(folder_path, paste0(file_id, "_session.RDS")))
 }
 
 #------------------------------------------MAINLOOP------------------------------------------------#
 print("Starting DBSCAN Analysis...")
-GITHUB_RAW_URL  <- "https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R"
+GITHUB_RAW_URL <- "https://raw.githubusercontent.com/nkcheung95/MSNA-APD-Post-processing/main/dbscan_script.R"
 current_version <- get_github_version(GITHUB_RAW_URL)
 failed_files <- character(0)
 for (file_id in names(all_data)) {
@@ -987,6 +978,7 @@ for (file_id in names(all_data)) {
   # Step H: Export all CSVs — single point of truth for all output files
   export_all_results(
     folder_path       = file_id_folder,
+    file_name         = file_name,
     norm_bundle       = norm_bundle,
     ap_metrics        = ap_metrics,
     base_prob_results = base_prob_results,
@@ -997,7 +989,7 @@ for (file_id in names(all_data)) {
   )
   
   # Step I: Archive Session Data
-  archive_analysis_session(file_id_folder, file_name)
+archive_analysis_session(file_id_folder, file_name, neurons_df, ap_metrics, norm_bundle)
   
     # Write version stamp on successful completion
     writeLines(current_version, file.path(file_id_folder, "analysis_version.txt"))
@@ -1010,9 +1002,10 @@ for (file_id in names(all_data)) {
   })
 
   # Clean environment for next loop iteration (keeps all functions and shared data intact)
-  rm(list = setdiff(ls(), c("all_data", "analyzed_folder", "file_name", "file_id",
-                             "failed_files", "current_version", "is_already_analyzed",
-                             "get_github_version", as.character(lsf.str()))))
+rm(list = setdiff(ls(), c("all_data", "analyzed_folder", "file_name", "file_id",
+                           "failed_files", "current_version", "GITHUB_RAW_URL",
+                           "is_already_analyzed", "get_github_version",
+                           as.character(lsf.str()))))
 }
 
 print("ALL FILES ANALYZED")
