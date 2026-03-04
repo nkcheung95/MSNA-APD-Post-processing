@@ -2,6 +2,51 @@
 ###LIBRARIES###
 #loaded via github loading call
 #--------------------------------------------------FUNCTIONS-------
+
+# get_github_version------------------------------------------------
+# GitHub Script Version Fetcher
+# Fn: Fetches and MD5-hashes raw script from GitHub to detect updates
+# Exec: get_github_version(github_raw_url)
+# ---------------------------------------------------------
+get_github_version <- function(github_raw_url) {
+  tryCatch({
+    hash <- readLines(github_raw_url, warn = FALSE)
+    digest::digest(hash, algo = "md5")
+  }, error = function(e) {
+    message("Warning: Could not fetch GitHub version, defaulting to offline check.")
+    return(NULL)
+  })
+}
+
+# is_already_analyzed---------------------------------------------------------
+# Analysis Completion & Version Checker
+# Fn: Checks if file has been analyzed with current script version, skips or re-runs accordingly
+# Exec: is_already_analyzed(analyzed_folder, file_id, file_name, current_version)
+#--------------------------------------------------------------------------
+is_already_analyzed <- function(analyzed_folder, file_id, file_name, current_version) {
+  file_id_folder <- file.path(analyzed_folder, file_id)
+  master_csv     <- file.path(file_id_folder, paste0(file_name, "_master_summary.csv"))
+  version_file   <- file.path(file_id_folder, "analysis_version.txt")
+
+  if (!file.exists(master_csv)) return(FALSE)
+
+  # If version check is unavailable, fall back to existence check only
+  if (is.null(current_version)) {
+    message("Skipping (already analyzed, version unknown): ", file_name)
+    return(TRUE)
+  }
+
+  # Re-run if version file missing or version has changed
+  if (!file.exists(version_file)) return(FALSE)
+  stored_version <- readLines(version_file, warn = FALSE)
+  if (stored_version != current_version) {
+    message("Re-running (script updated on GitHub): ", file_name)
+    return(FALSE)
+  }
+
+  message("Skipping (already analyzed, version current): ", file_name)
+  return(TRUE)
+}
 # prep_apd_data---------------------------------------------------------
 # Cluster split
 # Fn: Prepare data and split into cluster list
@@ -860,11 +905,16 @@ archive_analysis_session <- function(folder_path, file_id) {
 
 #------------------------------------------MAINLOOP------------------------------------------------#
 print("Starting DBSCAN Analysis...")
+GITHUB_RAW_URL  <- "https://github.com/nkcheung95/MSNA-APD-Post-processing/blob/main/dbscan_script.R"
+current_version <- get_github_version(GITHUB_RAW_URL)
 
 for (file_id in names(all_data)) {
   file_name <- substr(file_id, 1, nchar(file_id) - 10)
   message("--- Analyzing: ", file_name, " ---")
-  
+
+  if (is_already_analyzed(analyzed_folder, file_id, file_name, current_version)) next
+
+  tryCatch({
   # 1. Extract Sheets for Current File
   summ_sheet      <- all_data[[file_id]]$summ
   burst_sheet     <- all_data[[file_id]]$burst
@@ -949,11 +999,27 @@ for (file_id in names(all_data)) {
   # Step I: Archive Session Data
   archive_analysis_session(file_id_folder, file_name)
   
+    # Write version stamp on successful completion
+    writeLines(current_version, file.path(file_id_folder, "analysis_version.txt"))
+
+    message("Done: ", file_name)
+
+  }, error = function(e) {
+    message("ERROR in ", file_id, ": ", conditionMessage(e))
+    failed_files <<- c(failed_files, file_id)
+  })
+
   # Clean environment for next loop iteration (keeps all functions and shared data intact)
-  rm(list = setdiff(ls(), c("all_data", "analyzed_folder","file_name","file_id ",
-                             as.character(lsf.str()))))
-  
-  message("Done: ", file_name)
+  rm(list = setdiff(ls(), c("all_data", "analyzed_folder", "file_name", "file_id",
+                             "failed_files", "current_version", "is_already_analyzed",
+                             "get_github_version", as.character(lsf.str()))))
 }
 
-print("ALL FILES ANALYZED SUCCESSFULLY")
+print("ALL FILES ANALYZED")
+
+if (length(failed_files) > 0) {
+  message("\n--- FAILED FILES (", length(failed_files), ") ---")
+  for (f in failed_files) message("  x ", f)
+} else {
+  message("\nNo failures detected.")
+}
