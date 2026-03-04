@@ -126,11 +126,12 @@ generate_smoothed_ap <- function(ap_shapes_sheet) {
   # Drop the 'variable' column (factor of AP indices) — keep only aptime + value for geom_smooth
   clusterfigdata_melt <- clusterfigdata_melt[, c("aptime", "value")]
   
-  ap_visual <- ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
-    ggplot2::geom_smooth() +
-    ggplot2::theme_classic() +
-    ggplot2::ggtitle("SMOOTHED AP")
-  
+  ap_visual <- suppressMessages(
+    ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
+      ggplot2::geom_smooth() +
+      ggplot2::theme_classic() +
+      ggplot2::ggtitle("SMOOTHED AP")
+  )
   return(ap_visual)
 }
 
@@ -742,22 +743,24 @@ for (i in seq_along(cluster_list)) {
     dplyr::select(ap_amp, ap_latency, neuron_id) %>%
     dplyr::mutate(neuron_id = factor(neuron_id))
 
-  cluster_lat_amp_list[[i]] <- ggplot2::ggplot(
-    lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
-  ) +
-    ggplot2::geom_point() +
-    ggplot2::geom_density(
-      inherit.aes = FALSE,
-      data = lat_amp_with_clusters,
-      ggplot2::aes(ap_latency),
-      adjust = 0.5,
-      alpha = 0.5
+  cluster_lat_amp_list[[i]] <- suppressWarnings(
+    ggplot2::ggplot(
+      lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
     ) +
-    ggplot2::labs(x = "Latency", y = "Amplitude", color = "DBSCAN") +
-    ggplot2::xlim(min_latency, max_latency) +
-    ggplot2::ggtitle(paste("cluster", cluster_num)) +
-    ggplot2::scale_color_manual(values = cols) +
-    ggplot2::theme_classic()
+      ggplot2::geom_point() +
+      ggplot2::geom_density(
+        inherit.aes = FALSE,
+        data        = lat_amp_with_clusters,
+        ggplot2::aes(ap_latency),
+        adjust      = 0.5,
+        alpha       = 0.5
+      ) +
+      ggplot2::labs(x = "Latency", y = "Amplitude", color = "DBSCAN") +
+      ggplot2::xlim(min_latency, max_latency) +
+      ggplot2::ggtitle(paste("cluster", cluster_num)) +
+      ggplot2::scale_color_manual(values = cols) +
+      ggplot2::theme_classic()
+  )
 }
   
   # --- 2. latency_amplitude.png (standalone, as original) ---
