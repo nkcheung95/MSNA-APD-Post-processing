@@ -180,10 +180,11 @@ visualize_apd_clusters <- function(cluster_list, main_ap_vis, clusters_sheet, sa
   })
   
   # 3. Assemble and Save — matches original apshape_full layout
-  clustervis   <- gridExtra::grid.arrange(grobs = cluster_plots, ncol = 4)
-  apshape_full <- gridExtra::grid.arrange(main_ap_vis, clustervis, ncol = 2)
-  ggplot2::ggsave("ap_plot.png", apshape_full, path = save_path, width = 15, height = 15)
-  
+  clustervis   <- gridExtra::arrangeGrob(grobs = cluster_plots, ncol = 4)
+  apshape_full <- gridExtra::arrangeGrob(main_ap_vis, clustervis, ncol = 2)
+ggplot2::ggsave("ap_plot.png", apshape_full, path = save_path,
+                width = 15, height = 15, dpi = 150,
+                device = png_device, type = png_type)  
   return(cluster_plots)
 }
 
@@ -276,10 +277,15 @@ analyze_firing_probabilities <- function(cluster_list, rri_sheet, burst_sheet, s
     grobs = cluster_prob_list, ncol = 4,
     top   = grid::textGrob("clusters", gp = grid::gpar(fontsize = 16, fontface = "bold"))
   )
-  multifire_grid <- gridExtra::grid.arrange(grobs = multifire_list, ncol = 4)
+  multifire_grid <- gridExtra::arrangeGrob(grobs = multifire_list, ncol = 4)
   
-  ggplot2::ggsave("cluster_prob.png",   cluster_prob_grid, path = save_path, width = 15, height = 15)
-  ggplot2::ggsave("multifire_prob.png", multifire_grid,    path = save_path, width = 15, height = 15)
+ggplot2::ggsave("cluster_prob.png", cluster_prob_grid, path = save_path,
+                width = 15, height = 15, dpi = 150,
+                device = png_device, type = png_type)
+
+ggplot2::ggsave("multifire_prob.png", multifire_grid, path = save_path,
+                width = 15, height = 15, dpi = 150,
+                device = png_device, type = png_type)
   
   # 4. Build combined prob_data CSV exactly as original (beats + bursts + multifire merged)
   beats_data <- beats_prob_list %>%
@@ -706,14 +712,16 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
   }
   
   file_label    <- grid::textGrob(paste("File:", file_name), gp = grid::gpar(fontsize = 10))
-  combined_plot <- do.call(gridExtra::grid.arrange, c(plots_list, list(file_label), ncol = 1))
+  combined_plot <- do.call(gridExtra::arrangeGrob, c(plots_list, list(file_label), ncol = 1))
   
-  ggplot2::ggsave(
-    file.path(plots_folder, paste0(file_name, "_isi_plot.png")),
-    plot   = combined_plot,
-    width  = 6,
-    height = length(plots_list) * 1.5
-  )
+ggplot2::ggsave(
+  file.path(plots_folder, paste0(file_name, "_isi_plot.png")),
+  plot   = combined_plot,
+  width  = 6,
+  height = min(length(plots_list) * 1.5, 30),
+  dpi    = 150,
+  device = png_device, type = png_type
+)
   
   return(combined_plot)
 }
@@ -764,11 +772,9 @@ for (i in seq_along(cluster_list)) {
 }
   
   # --- 2. latency_amplitude.png (standalone, as original) ---
-  lat_amp_summary <- gridExtra::grid.arrange(grobs = cluster_lat_amp_list, ncol = 1)
+  lat_amp_summary <- gridExtra::arrangeGrob(grobs = cluster_lat_amp_list, ncol = 1)
   gridheight      <- length(cluster_lat_amp_list) * 2
   lat_amp_summary <- gridExtra::arrangeGrob(lat_amp_summary, top = file_name)
-  ggplot2::ggsave("latency_amplitude.png", lat_amp_summary,
-                  path = plots_folder, height = gridheight, width = 15, limitsize = FALSE)
   
   # --- 3. all_lat_amp_plot.png (standalone, as original) ---
   all_lat_amp <- ap_sheet[c(4, 8, 9)]
@@ -783,8 +789,6 @@ for (i in seq_along(cluster_list)) {
     ggplot2::ggtitle("Amplitude/Latency") +
     ggplot2::scale_color_continuous(type = "viridis") +
     ggplot2::theme_classic()
-  ggplot2::ggsave("all_lat_amp_plot.png", all_lat_amp_plot,
-                  path = plots_folder, height = 15, width = 15)
   
   # --- 4. cluster_summary.png ---
   # Layout: shape | beats_prob | cluster_prob | multifire | lat_amp  (5 cols, widths c(1,1,1,2,2))
@@ -803,11 +807,27 @@ for (i in seq_along(cluster_list)) {
     combined_grobs_list <- c(combined_grobs_list, list(combined_plot))
   }
   
-  grid         <- gridExtra::grid.arrange(grobs = combined_grobs_list, ncol = 1)
+  grid         <- gridExtra::arrangeGrob(grobs = combined_grobs_list, ncol = 1)
   cluster_summary <- gridExtra::arrangeGrob(grid, top = file_name)
   gridheight   <- length(combined_grobs_list) * 2
-  ggplot2::ggsave("cluster_summary.png", cluster_summary,
-                  path = plots_folder, height = gridheight, width = 15, limitsize = FALSE)
+ # latency_amplitude.png
+ggplot2::ggsave("latency_amplitude.png", lat_amp_summary,
+                path = plots_folder, height = min(gridheight, 40), width = 15,
+                limitsize = FALSE, dpi = 150,
+                device = png_device, type = png_type)
+
+# all_lat_amp_plot.png
+ggplot2::ggsave("all_lat_amp_plot.png", all_lat_amp_plot,
+                path = plots_folder, height = 15, width = 15,
+                dpi = 150,
+                device = png_device, type = png_type)
+
+# cluster_summary.png
+gridheight <- min(length(combined_grobs_list) * 2, 40)
+ggplot2::ggsave("cluster_summary.png", cluster_summary,
+                path = plots_folder, height = gridheight, width = 15,
+                limitsize = FALSE, dpi = 150,
+                device = png_device, type = png_type)
   
   # --- 5. Reference Binning CSV ---
   extract_numbers <- function(text) {
@@ -902,6 +922,13 @@ print("Starting DBSCAN Analysis...")
 GITHUB_RAW_URL <- "https://raw.githubusercontent.com/nkcheung95/MSNA-APD-Post-processing/main/dbscan_script.R"
 current_version <- get_github_version(GITHUB_RAW_URL)
 failed_files <- character(0)
+
+cairo_available <- capabilities("cairo")
+png_device      <- if (cairo_available) grDevices::png else NULL
+png_type        <- if (cairo_available) "cairo" else NULL
+
+if (cairo_available) message("Cairo renderer: enabled") else message("Cairo renderer: unavailable, using default")
+
 for (file_id in names(all_data)) {
   file_name <- substr(file_id, 1, nchar(file_id) - 10)
   message("--- Analyzing: ", file_name, " ---")
@@ -1007,12 +1034,11 @@ archive_analysis_session(file_id_folder, file_name, neurons_df, ap_metrics, norm
   # Clean environment for next loop iteration (keeps all functions and shared data intact)
 rm(list = setdiff(ls(), c("all_data", "analyzed_folder", "file_name", "file_id",
                            "failed_files", "current_version", "GITHUB_RAW_URL",
+                           "cairo_available", "png_device", "png_type",
                            "is_already_analyzed", "get_github_version",
                            as.character(lsf.str()))))
 }
-
-print("ALL FILES ANALYZED")
-
+  
 if (length(failed_files) > 0) {
   message("\n--- FAILED FILES (", length(failed_files), ") ---")
   for (f in failed_files) message("  x ", f)
