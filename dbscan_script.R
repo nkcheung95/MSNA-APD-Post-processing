@@ -470,6 +470,22 @@ split_list_by_neuron <- function(original_list) {
   return(result_list)
 }
 
+# natural_sort_clusters---------------------------------------------------------
+# Cluster name in actual order
+# Fn: sorts clusters properly following dbscan
+# Exec: db_stats <- analyze_neuron_probabilities(neuron_list, beats_total, burst_total, file_id_folder, file_id)
+# ---------------------------------------------------------
+natural_sort_clusters <- function(df, col = "cluster") {
+    df |>
+      dplyr::mutate(
+        .sort_base = as.numeric(stringr::str_extract(.data[[col]], "^\\d+")),
+        .sort_sub  = as.numeric(stringr::str_extract(.data[[col]], "(?<=_)\\d+$")),
+        .sort_sub  = dplyr::coalesce(.sort_sub, 0)
+      ) |>
+      dplyr::arrange(.sort_base, .sort_sub) |>
+      dplyr::mutate(dplyr::across(dplyr::all_of(col), ~ factor(., levels = unique(.)))) |>
+      dplyr::select(-.sort_base, -.sort_sub)
+  }
 # analyze_neuron_probabilities---------------------------------------------------------
 # DBSCAN Neuron Analyzer
 # Fn: Calculates probabilities and multi-fire stats for individual neurons
@@ -576,7 +592,9 @@ analyze_neuron_probabilities <- function(neuron_list, beats_total, burst_total, 
       )
     ))
 
-  
+   dbprob_data       <- natural_sort_clusters(dbprob_data,       col = "cluster")
+  dbmean_ap_latency <- natural_sort_clusters(dbmean_ap_latency, col = "cluster_name")
+
   return(list(
     dbprob_data       = dbprob_data,
     dbmean_ap_latency = dbmean_ap_latency,
@@ -973,10 +991,10 @@ for (file_id in names(all_data)) {
   # Step E: ISI Analysis (master timescale) — raw and normalized with plots
   isi_raw  <- analyze_isi(neurons_df,             file_id_folder, file_name)
   isi_norm <- analyze_isi(norm_bundle$normalized, file_id_folder, file_name, suffix = "_NORM", split_by = "amp_percentile_bin")
-  suppressWarnings(
+  suppressWarnings({
     plot_isi(isi_raw,  plots_folder, file_name)
   plot_isi(isi_norm, plots_folder, paste0(file_name, "_NORM"))
-  )
+  })
   # Step F: Split by Sub-Neuron & Analyze Final DBSCAN Probabilities
   dbscan_cluster_list <- split(neurons_df, neurons_df$`Cluster Number`)
   neuron_list         <- split_list_by_neuron(dbscan_cluster_list)
