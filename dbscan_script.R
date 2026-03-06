@@ -125,13 +125,12 @@ generate_smoothed_ap <- function(ap_shapes_sheet) {
   # Drop the 'variable' column (factor of AP indices) — keep only aptime + value for geom_smooth
   clusterfigdata_melt <- clusterfigdata_melt[, c("aptime", "value")]
   
-  ap_visual <- suppressMessages(
-    ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
-      ggplot2::geom_smooth(span=0.25) +
-      ggplot2::theme_classic() +
-      ggplot2::ggtitle("SMOOTHED AP")
-  )
-  return(ap_visual)
+ap_visual <- ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
+  ggplot2::geom_smooth(span = 0.25, method = "loess", formula = y ~ x) +
+  ggplot2::theme_classic() +
+  ggplot2::ggtitle("SMOOTHED AP")
+
+return(ap_visual)
 }
 
 # visualize_apd_clusters ---------------------------------------------------------
@@ -684,7 +683,7 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
     cl_ap_isi_md  <- median(cluster_data$ap_isi, na.rm = TRUE)
     cl_ap_isi_me  <- mean(cluster_data$ap_isi,   na.rm = TRUE)
     
-    plots_list[[cluster]] <- suppressWarnings(ggplot2::ggplot(
+    plots_list[[cluster]] <- ggplot2::ggplot(
       cluster_data, ggplot2::aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))
     ) +
       ggplot2::geom_density(
@@ -707,7 +706,7 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
         axis.title.y  = ggplot2::element_blank(),
         axis.text.y   = ggplot2::element_blank(),
         legend.position = "none"
-      ))
+      )
   }
   
   file_label    <- grid::textGrob(paste("File:", file_name), gp = grid::gpar(fontsize = 10))
@@ -750,8 +749,7 @@ for (i in seq_along(cluster_list)) {
     dplyr::select(ap_amp, ap_latency, neuron_id) %>%
     dplyr::mutate(neuron_id = factor(neuron_id))
 
-  cluster_lat_amp_list[[i]] <- suppressWarnings(
-    ggplot2::ggplot(
+  cluster_lat_amp_list[[i]] <-     ggplot2::ggplot(
       lat_amp_with_clusters, ggplot2::aes(x = ap_latency, y = ap_amp, color = neuron_id)
     ) +
       ggplot2::geom_point() +
@@ -767,7 +765,6 @@ for (i in seq_along(cluster_list)) {
       ggplot2::ggtitle(paste("cluster", cluster_num)) +
       ggplot2::scale_color_manual(values = cols) +
       ggplot2::theme_classic()
-  )
 }
   
   # --- 2. latency_amplitude.png (standalone, as original) ---
@@ -976,9 +973,10 @@ for (file_id in names(all_data)) {
   # Step E: ISI Analysis (master timescale) — raw and normalized with plots
   isi_raw  <- analyze_isi(neurons_df,             file_id_folder, file_name)
   isi_norm <- analyze_isi(norm_bundle$normalized, file_id_folder, file_name, suffix = "_NORM", split_by = "amp_percentile_bin")
-  plot_isi(isi_raw,  plots_folder, file_name)
+  suppressWarnings(
+    plot_isi(isi_raw,  plots_folder, file_name)
   plot_isi(isi_norm, plots_folder, paste0(file_name, "_NORM"))
-
+  )
   # Step F: Split by Sub-Neuron & Analyze Final DBSCAN Probabilities
   dbscan_cluster_list <- split(neurons_df, neurons_df$`Cluster Number`)
   neuron_list         <- split_list_by_neuron(dbscan_cluster_list)
@@ -987,7 +985,8 @@ for (file_id in names(all_data)) {
   )
   
   # Step G: Master Summary Grid (plots only)
-  master_summary <- create_master_summary(
+  master_summary <- suppressWarnings(
+    create_master_summary(
     cluster_list      = cluster_list,
     neurons_df        = neurons_df,
     shape_plots       = shape_plots,
@@ -1002,7 +1001,7 @@ for (file_id in names(all_data)) {
     clusters_sheet    = clusters_sheet,
     dbprob_data       = db_stats_bundle$dbprob_data,
     dbmean_ap_latency = ap_metrics$summary
-  )
+  ))
   
   # Step H: Export all CSVs — single point of truth for all output files
   export_all_results(
