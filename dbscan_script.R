@@ -111,7 +111,6 @@ normalize_neurons_full <- function(neurons_df, clusters_sheet, save_path, file_i
 # AP Smoother
 # Fn: Generate smoothed AP figure
 # Exec: ap_visual <- generate_smoothed_ap(ap_shapes_sheet)
-# NOTE: ap_shapes_sheet must already have columns renamed (done inside prep_apd_data)
 # ---------------------------------------------------------
 generate_smoothed_ap <- function(ap_shapes_sheet) {
   
@@ -128,7 +127,7 @@ generate_smoothed_ap <- function(ap_shapes_sheet) {
   
   ap_visual <- suppressMessages(
     ggplot2::ggplot(clusterfigdata_melt, ggplot2::aes(aptime, value)) +
-      ggplot2::geom_smooth() +
+      ggplot2::geom_smooth(span=0.25) +
       ggplot2::theme_classic() +
       ggplot2::ggtitle("SMOOTHED AP")
   )
@@ -657,10 +656,10 @@ firing_stats <- multicount %>%
         cl_ap_isi_iqr = IQR(cluster_data$ap_isi,    na.rm = TRUE),
         cl_ap_isi_min = min(cluster_data$ap_isi,    na.rm = TRUE),
         cl_ap_isi_max = max(cluster_data$ap_isi,    na.rm = TRUE),
-        n_2fire       = sum(multicount$n_2fire),
-        n_3fire       = sum(multicount$n_3fire),
-        n_4fire       = sum(multicount$n_4fire),
-        n_5fire       = sum(multicount$`n_5+fire`),
+        n_2fire       = sum(multicount$n_2fire,    na.rm = TRUE),
+        n_3fire       = sum(multicount$n_3fire,    na.rm = TRUE),
+        n_4fire       = sum(multicount$n_4fire,    na.rm = TRUE),
+        n_5fire       = sum(multicount$`n_5+fire`,    na.rm = TRUE),
         stringsAsFactors = FALSE
       ),
       firing_stats
@@ -685,7 +684,7 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
     cl_ap_isi_md  <- median(cluster_data$ap_isi, na.rm = TRUE)
     cl_ap_isi_me  <- mean(cluster_data$ap_isi,   na.rm = TRUE)
     
-    plots_list[[cluster]] <- ggplot2::ggplot(
+    plots_list[[cluster]] <- suppressWarnings(ggplot2::ggplot(
       cluster_data, ggplot2::aes(x = ap_isi, fill = as.factor(`Burst Number`), color = as.factor(`Burst Number`))
     ) +
       ggplot2::geom_density(
@@ -708,7 +707,7 @@ plot_isi <- function(isi_result, plots_folder, file_name) {
         axis.title.y  = ggplot2::element_blank(),
         axis.text.y   = ggplot2::element_blank(),
         legend.position = "none"
-      )
+      ))
   }
   
   file_label    <- grid::textGrob(paste("File:", file_name), gp = grid::gpar(fontsize = 10))

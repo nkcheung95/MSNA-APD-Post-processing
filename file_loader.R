@@ -65,6 +65,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
 
     # 3. Read sheets into a named list for this specific file
     # We use a list so we don't overwrite variables in each loop iteration
+    suppressMessages(
     file_sheets <- list(
       summ      = read_xls(raw_file, sheet = 1),
       burst     = read_xls(raw_file, sheet = 2),
@@ -73,7 +74,7 @@ if (!is.null(raw_files) && length(raw_files) > 0) {
       clusters  = read_xls(raw_file, sheet = 5),
       rri       = read_xls(raw_file, sheet = 6)
     )
-    
+  )
     # 4. Store this file's list into our master list using the file_id as the name
     all_data[[file_id]] <- file_sheets
   }
